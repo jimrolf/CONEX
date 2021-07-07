@@ -1,6 +1,6 @@
 /// <reference types="Cypress" />
 
-describe("Homepage Regression Test", { defaultCommandTimeout: 5000 }, () => {
+describe("Homepage Regression Test", () => {
   before(() => {
     cy.intercept("GET", "/api/home/updates?**").as("updates");
     cy.intercept("GET", "/api/home/videos?**").as("videos");
