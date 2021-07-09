@@ -40,11 +40,11 @@ config.mongoDBs = {
   8374: "conexBlue21",
   8369: "smithBlue21",
   8367: "trinityBlue21",
-  8467: "physics21", 
+  8467: "physics21",
 };
 
 // If we're in a development environment, use the development databasez
-if (process.env.NODE_ENV == "development") {
+if (process.env.NODE_ENV === "development") {
   config.mongoDBs["8310"] = "development";
   config.mongoDBs["8285"] = "development";
 }
