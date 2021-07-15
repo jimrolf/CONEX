@@ -43,7 +43,7 @@ cron.schedule("0 0 0 * * *", () => {
  * @todo - possible optimzation: store various maps in redis cache
  * @description - https://www.npmjs.com/package/node-cron; runs every 15 minues to update every course's user progress
  */
-cron.schedule("*/15 * * * *", async () => {
+cron.schedule("*/5 * * * * *", async () => {
   Object.keys(config.mongoDBs).map(async (courseID) => {
     let logs = { success: {}, failed: [] };
     try {
@@ -133,7 +133,13 @@ cron.schedule("*/15 * * * *", async () => {
                     score += 100;
                     completed.practice += 1;
                     // If submission not already stored in MongoDB
-                    if (subj) {
+                    if (
+                      subj === "chem" ||
+                      subj === "econ" ||
+                      subj === "physics" ||
+                      subj === "engineering" ||
+                      subj === "bio"
+                    ) {
                       completed[subj] += 1;
                       logs.success[user.user_id][subj].push(submission.assignment_id);
                     }
@@ -157,7 +163,14 @@ cron.schedule("*/15 * * * *", async () => {
                   if (submission.score >= 90) {
                     score += 100;
                     completed.apply += 1;
-                    if (subj && userProgress.modules[moduleID].practice) {
+                    if (
+                      (subj === "chem" ||
+                        subj === "econ" ||
+                        subj === "physics" ||
+                        subj === "engineering" ||
+                        subj === "bio") &&
+                      userProgress.modules[moduleID].practice
+                    ) {
                       completed[subj] += 1;
                       logs.success[user.user_id][subj].push(submission.assignment_id);
                     }
