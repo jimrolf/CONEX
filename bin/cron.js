@@ -43,98 +43,97 @@ cron.schedule("0 0 0 * * *", () => {
  * @todo - possible optimzation: store various maps in redis cache
  * @description - https://www.npmjs.com/package/node-cron; runs every 15 minues to update every course's user progress
  */
-if (process.env.NODE_ENV === "production")
-  cron.schedule("*/15 * * * *", async () => {
-    const logs = {};
-    Object.keys(config.mongoDBs).map(async (courseID) => {
-      console.log(`Updating ${config.mongoDBs[courseID]}'s user progress`);
-      try {
-        const assignmentIdToType = {}, // Maps a course's modules assignment id to its type - e.g 22657: "practice"
-          badgeIdToPoints = {}; // Maps a course's badges id to its points - e.g 1: 200
+cron.schedule("*/15 * * * *", async () => {
+  const logs = {};
+  Object.keys(config.mongoDBs).map(async (courseID) => {
+    console.log(`Updating ${config.mongoDBs[courseID]}'s user progress`);
+    try {
+      const assignmentIdToType = {}, // Maps a course's modules assignment id to its type - e.g 22657: "practice"
+        badgeIdToPoints = {}; // Maps a course's badges id to its points - e.g 1: 200
 
-        const db = mongo.client.db(config.mongoDBs[courseID]),
-          userSubmissionsPromise = () =>
-            canvas.getSubmissions(
-              courseID,
-              "student_ids[]=all&workflow_state=graded&grouped=true&per_page=1000" // Get submissions grouped by user - e.g [{user_id:1, submissions: []}, ...]
-            ),
-          modulesPromise = () => db.collection("modules").find().sort({ _id: 1 }).toArray(),
-          dailyTasksPromise = () => db.collection("daily_task").find().sort({ _id: 1 }).toArray(),
-          badgesPromise = () => db.collection("badges").find().sort({ _id: 1 }).toArray();
-
-        // Retrieve all necessary information at once
-        const [userSubmissions, modules, daily_tasks, badges] = await Promise.allSettled([
-          userSubmissionsPromise(),
-          modulesPromise(),
-          dailyTasksPromise(),
-          badgesPromise(),
-        ]);
-
-        // Initialize maps to each value
-        modules.value.map((module) => {
-          assignmentIdToType[module.practice_link] = {
-            type: "practice",
-            moduleID: module._id,
-            subject: module.subject ? module.subject : null,
-          };
-          assignmentIdToType[module.quiz_link] = {
-            type: "apply",
-            moduleID: module._id,
-            subject: module.subject ? module.subject : null,
-          };
-          assignmentIdToType[module.reflection_link] = { type: "reflection", moduleID: module._id };
-        });
-        daily_tasks.value.map((daily) => {
-          assignmentIdToType[daily.assignment_id] = { type: "daily" };
-        });
-        badges.value.map((badge) => {
-          badgeIdToPoints[badge._id] = parseInt(badge.Points);
-        });
-
-        // Iterate through each user
-        for (const user of userSubmissions.value) {
-          if (user.submissions.length <= 0) continue;
-
-          let score = 0; // User score
-          // Number of completed assignments
-          const completed = {
-              practice: 0,
-              apply: 0,
-              reflection: 0,
-              daily: 0,
-            },
-            userProgress = await db // Get current user's progress from MongoDB
-              .collection("user_progress")
-              .findOne({ user: user.user_id.toString() });
-
-          if (!userProgress) continue;
-
-          score += await updateModuleProgress(
+      const db = mongo.client.db(config.mongoDBs[courseID]),
+        userSubmissionsPromise = () =>
+          canvas.getSubmissions(
             courseID,
-            assignmentIdToType,
-            modules.value,
-            userProgress,
-            user.submissions,
-            completed,
-            logs
-          );
+            "student_ids[]=all&workflow_state=graded&grouped=true&per_page=1000" // Get submissions grouped by user - e.g [{user_id:1, submissions: []}, ...]
+          ),
+        modulesPromise = () => db.collection("modules").find().sort({ _id: 1 }).toArray(),
+        dailyTasksPromise = () => db.collection("daily_task").find().sort({ _id: 1 }).toArray(),
+        badgesPromise = () => db.collection("badges").find().sort({ _id: 1 }).toArray();
 
-          score += await updateBadgeProgress(
-            courseID,
-            userProgress,
-            completed,
-            badgeIdToPoints,
-            logs
-          );
+      // Retrieve all necessary information at once
+      const [userSubmissions, modules, daily_tasks, badges] = await Promise.allSettled([
+        userSubmissionsPromise(),
+        modulesPromise(),
+        dailyTasksPromise(),
+        badgesPromise(),
+      ]);
 
-          await mongo.updateUserProgressField(courseID, userProgress.user, "$set", "score", score);
-        }
-        console.log("Finished", JSON.stringify(logs));
-      } catch (e) {
-        console.error(e);
+      // Initialize maps to each value
+      modules.value.map((module) => {
+        assignmentIdToType[module.practice_link] = {
+          type: "practice",
+          moduleID: module._id,
+          subject: module.subject ? module.subject : null,
+        };
+        assignmentIdToType[module.quiz_link] = {
+          type: "apply",
+          moduleID: module._id,
+          subject: module.subject ? module.subject : null,
+        };
+        assignmentIdToType[module.reflection_link] = { type: "reflection", moduleID: module._id };
+      });
+      daily_tasks.value.map((daily) => {
+        assignmentIdToType[daily.assignment_id] = { type: "daily" };
+      });
+      badges.value.map((badge) => {
+        badgeIdToPoints[badge._id] = parseInt(badge.Points);
+      });
+
+      // Iterate through each user
+      for (const user of userSubmissions.value) {
+        if (user.submissions.length <= 0) continue;
+
+        let score = 0; // User score
+        // Number of completed assignments
+        const completed = {
+            practice: 0,
+            apply: 0,
+            reflection: 0,
+            daily: 0,
+          },
+          userProgress = await db // Get current user's progress from MongoDB
+            .collection("user_progress")
+            .findOne({ user: user.user_id.toString() });
+
+        if (!userProgress) continue;
+
+        score += await updateModuleProgress(
+          courseID,
+          assignmentIdToType,
+          modules.value,
+          userProgress,
+          user.submissions,
+          completed,
+          logs
+        );
+
+        score += await updateBadgeProgress(
+          courseID,
+          userProgress,
+          completed,
+          badgeIdToPoints,
+          logs
+        );
+
+        await mongo.updateUserProgressField(courseID, userProgress.user, "$set", "score", score);
       }
-    });
+      console.log("Finished", JSON.stringify(logs));
+    } catch (e) {
+      console.error(e);
+    }
   });
+});
 
 /**
  * @description - Updates the user's module progress from the diff between the progress based on Canvas submissions and progress in MongoDB. Updates `completed` to contain the number of assignments completed by type. Returns `score` earned by module progress.
