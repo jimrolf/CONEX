@@ -131,15 +131,6 @@ $(document).ready(async function () {
       .always(() => hideLoadingBar());
   }
 
-  // if (needs.includes("testInfo")) {
-  //   $.get(`${herokuAPI}/testInfo`, {
-  //     hostname: window.location.hostname,
-  //     courseID,
-  //   })
-  //     .done((data) => writeTestInfo(data))
-  //     .fail((err) => console.log("test info retrieval failed"));
-  // }
-
   if (needs.includes("moduleVideos")) {
     $.get(`${herokuAPI}/modules`, {
       hostname,
@@ -354,8 +345,7 @@ function writeLuckyInfo(lucky) {
 function writeNavigationData(data) {
   $("#coach_info").val(data[0].src);
   $("#life_on_grounds").val(data[1].src);
-  $("#post_test").val(data[2].src);
-  $("#welcome").val(data[3].src);
+  $("#welcome").val(data[2].src);
 }
 
 function writeBadges(badges) {
@@ -384,7 +374,6 @@ function writeBadges(badges) {
       .change((event) => {
         $("p.previewPoints").html($(event.target).val());
       });
-    // $("#assignment_id").val(badgeToEdit.);
     $("#portrait")
       .val(badgeToEdit.Portrait)
       .change((event) => {
@@ -550,6 +539,7 @@ function writeModuleVidEdit(modules) {
   $("#video_desc_helper").val(moduleVidToEdit.video_desc_helper);
   $("#position").val(moduleVidToEdit.position);
 }
+
 /////////////////////////////////////////////////////////////////////////////////////
 // AJAX shortcut helpers
 function updateHome(field, value) {
@@ -558,8 +548,14 @@ function updateHome(field, value) {
     field,
     value,
   })
-    .done((res) => console.log("[H] done"))
-    .fail((res) => console.log("[H] fail"));
+    .done((res) => {
+      console.log("[H] done");
+      alert("Home page updated successfully.");
+    })
+    .fail((res) => {
+      console.log("[H] fail");
+      alert("Home page update failed.");
+    });
 }
 
 // Any parameters which eval to false (undefined/null/etc...) will be left unmodified
@@ -587,11 +583,12 @@ function updateVideoDefaults(thumbnail, playbutton) {
     .fail((res) => console.log("[VD] fail"));
 }
 
-function updateNavigation(location, link) {
+function updateNavigation() {
   $.post(herokuAPI + "/admin/updateNavigation", {
     courseID,
-    location,
-    link,
+    coach_info: $("#coach_info").val(),
+    life_on_grounds: $("#life_on_grounds").val(),
+    welcome: $("#welcome").val(),
   })
     .done((res) => {
       console.log("[N] done");

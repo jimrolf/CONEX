@@ -6,8 +6,6 @@ const MongoClient = require("mongodb").MongoClient,
     keepAlive: 1,
     connectTimeoutMS: 30000,
   },
-  assert = require("assert"),
-  async = require("async"),
   config = require("../bin/config"),
   client = new MongoClient(config.mongoURL, mongoSettings);
 
@@ -63,9 +61,13 @@ function randomString() {
   return result;
 }
 
-function getHomepageUpdates(courseID, callback) {
-  let db = client.db(config.mongoDBs[courseID]);
-  db.collection("home").findOne({ type: "updates" }, (err, data) => callback(err, data));
+function getHomepageUpdates(courseID) {
+  try {
+    const db = client.db(config.mongoDBs[courseID]);
+    return db.collection("home").findOne({ type: "updates" });
+  } catch (e) {
+    console.log(e);
+  }
 }
 
 function updateHomepageUpdates(courseID, field, value, callback) {
@@ -79,35 +81,21 @@ function updateHomepageUpdates(courseID, field, value, callback) {
 }
 
 function getHomepageVideos(courseID, callback) {
-  let db = client.db(config.mongoDBs[courseID]);
-  async.parallel(
-    [
-      async.reflect((callback) => {
-        db.collection("home")
-          .find({ type: "video" })
-          .sort({ position: 1 })
-          .toArray()
-          .then((data) => {
-            callback(null, data);
-          })
-          .catch((err) => {
-            callback(err, null);
-          });
-      }),
-      async.reflect((callback) => {
-        db.collection("home").findOne({ type: "all-vids" }, (err, data) => {
-          callback(err, data);
-        });
-      }),
-    ],
-    (err, data) => {
+  const db = client.db(config.mongoDBs[courseID]);
+  db.collection("home")
+    .find({ $or: [{ type: "video" }, { type: "all-vids" }] })
+    .sort({ position: 1 })
+    .toArray()
+    .then((videos) => {
       callback(null, {
-        thumbnail: data[1].value.thumbnail,
-        playbutton: data[1].value.playbutton,
-        videos: data[0].value,
+        thumbnail: videos[0].thumbnail,
+        playbutton: videos[0].playbutton,
+        videos: videos.slice(1),
       });
-    }
-  );
+    })
+    .catch((err) => {
+      callback(err, null);
+    });
 }
 
 function updateVideo(courseID, videoID, setDict, callback) {
@@ -214,12 +202,15 @@ function getNavigationData(courseID, callback) {
     .catch((err) => callback(err, null));
 }
 
-function updateNavigation(courseID, location, link, callback) {
-  let db = client.db(config.mongoDBs[courseID]);
-  db.collection("navigation")
-    .findOneAndUpdate({ page: location }, { $set: { src: link } })
-    .then(() => callback(null))
-    .catch((err) => callback(err));
+function updateNavigation(courseID, location, link) {
+  try {
+    const db = client.db(config.mongoDBs[courseID]);
+    return db
+      .collection("navigation")
+      .findOneAndUpdate({ page: location }, { $set: { src: link } });
+  } catch (e) {
+    console.log(e);
+  }
 }
 
 function updateBadge(courseID, badge, callback) {

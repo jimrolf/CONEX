@@ -42,7 +42,7 @@ router.get("/authorize/getCourseTitle", (req, res) => {
  * @hostname
  * @courseID
  **/
-router.get("/home/updates", (req, res) => {
+router.get("/home/updates", async (req, res) => {
   if (!req.session.user_id)
     res.status(403).send("403 - Forbidden. You must be logged in to make this request.");
   else {
@@ -50,11 +50,9 @@ router.get("/home/updates", (req, res) => {
       authorize(req);
       assert(Object.keys(req.session.course_id).includes(req.query.courseID)); // prevent cross track cookie usage
       assert(req.query.hostname);
-      mongo.getHomepageUpdates(req.query.courseID, (err, updates) => {
-        if (err)
-          res.status(500).send("500 - Internal Server Error. Home data could not be retrieved.");
-        else res.status(200).header(access, getDst(req.query.hostname)).send(updates);
-      });
+      const updates = await mongo.getHomepageUpdates(req.query.courseID);
+      if (updates) res.status(200).header(access, getDst(req.query.hostname)).send(updates);
+      else res.status(500).send("500 - Internal Server Error. Home data could not be retrieved.");
     } catch (e) {
       res.status(406).send("406 - Your request could not be processed.");
     }
@@ -484,29 +482,12 @@ router.post("/admin/updateModule/:id", (req, res) => {
   if (req.session.admin) {
     try {
       authorize(req);
+      Object.values(req.body).map((field) => assert(typeof field === "string"));
       if (req.body.open) assert(/(true|false)/.test(req.body.open)); // Open must be a valid boolean
       if (req.body.due) assert(/(true|false)/.test(req.body.due)); // Due must be a valid boolean
       if (req.body.practice_id_bool) assert(/(true|false)/.test(req.body.practice_id_bool)); // Open must be a valid boolean
-
       assert(/\d+/.test(parseInt(req.params.id))); // IDs must be an integer
-      assert(req.body.primary_title);
-      assert(req.body.secondary_title);
-      assert(req.body.practice_link);
-      assert(req.body.practice_cutoff);
-      assert(req.body.multiple_practice_cutoff);
-      assert(req.body.quiz_link);
-      assert(req.body.quiz_cutoff);
-      assert(req.body.reflection_link);
-      assert(req.body.background_image);
-      assert(req.body.background_name);
-      assert(req.body.background_desc);
-      assert(req.body.overview);
-      assert(req.body.apply_description);
-      assert(req.body.apply_read_src);
-      assert(req.body.explore);
-      assert(req.body.button_background_image);
-      assert(req.body.practice_url_redirect);
-      assert(req.body.subject);
+
       let submit = {
         _id: parseInt(req.params.id),
         primary_title: req.body.primary_title,
@@ -594,18 +575,24 @@ router.post("/admin/updateModuleVid", (req, res) => {
 });
 
 // Asynchronously update navigation options
-const navigationLocations = ["welcome", "coach_info", "life_on_grounds", "post_test"];
+const navigationLocations = ["welcome", "coach_info", "life_on_grounds"];
 router.post("/admin/updateNavigation", (req, res) => {
   if (req.session.admin) {
     try {
       authorize(req);
-      assert(navigationLocations.includes(req.body.location));
+      assert(Object.keys(req.session.course_id).includes(req.body.courseID));
       // assert(/https?:\/\/.+/.test(req.body.link)); uncomment after switching to cloud stored file
-      mongo.updateNavigation(req.body.courseID, req.body.location, req.body.link, (err) => {
-        if (err)
+      navigationLocations.map(async (location) => {
+        assert(location in req.body);
+        const navigation = await mongo.updateNavigation(
+          req.body.courseID,
+          location,
+          req.body[location]
+        );
+        if (!navigation)
           res.status(500).send("500 - Internal Server Error. Request could not be processed.");
-        else res.status(200).send("200 - OK");
       });
+      res.status(200).send("200 - OK");
     } catch (e) {
       res.status(406);
       res.send(
