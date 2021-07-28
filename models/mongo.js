@@ -259,6 +259,15 @@ function updateModuleVid(courseID, moduleVid, moduleID, videoID, callback) {
     .catch((err) => callback(err));
 }
 
+function addModuleVid(courseID, moduleVid, moduleID, callback) {
+  const db = client.db(config.mongoDBs[courseID]);
+  moduleVid._id = randomString();
+  db.collection("modules")
+    .update({ _id: parseInt(moduleID) }, { $push: { videos: moduleVid } })
+    .then(() => callback(null))
+    .catch((err) => callback(err));
+}
+
 function addHomeVid(courseID, homeVid, callback) {
   const db = client.db(config.mongoDBs[courseID]);
   db.collection("home")
@@ -270,6 +279,32 @@ function addHomeVid(courseID, homeVid, callback) {
       type: "video",
       position: homeVid.position,
     })
+    .then(() => callback(null))
+    .catch(() => callback(err));
+}
+
+function addModule(courseID, module, callback) {
+  const db = client.db(config.mongoDBs[courseID]);
+  db.collection("modules")
+    .update({ _id: module._id }, { $setOnInsert: module }, { upsert: true })
+    .then(() => callback(null))
+    .catch(() => callback(err));
+}
+
+function deleteModule(courseID, moduleID, callback) {
+  const db = client.db(config.mongoDBs[courseID]);
+  db.collection("modules")
+    .deleteOne({
+      _id: parseInt(moduleID),
+    })
+    .then(() => callback(null))
+    .catch(() => callback(err));
+}
+
+function deleteModuleVid(courseID, moduleID, vidID, callback) {
+  const db = client.db(config.mongoDBs[courseID]);
+  db.collection("modules")
+    .update({ _id: parseInt(moduleID) }, { $pull: { videos: { _id: vidID } } })
     .then(() => callback(null))
     .catch(() => callback(err));
 }
@@ -355,8 +390,12 @@ module.exports = {
   updateBadge,
   updateModule,
   updateModuleVid,
+  addModuleVid,
   addHomeVid,
+  addModule,
   deleteHomeVid,
+  deleteModule,
+  deleteModuleVid,
   updateDaily,
   updateTodaysDaily,
   updateUserProgressField,

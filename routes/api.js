@@ -379,12 +379,108 @@ router.post("/admin/addHomeVid", (req, res) => {
   } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
 });
 
+router.post("/admin/addModule/:id", (req, res) => {
+  if (req.session.admin) {
+    try {
+      authorize(req);
+      Object.values(req.body).map((field) => assert(typeof field === "string"));
+      if (req.body.open) assert(/(true|false)/.test(req.body.open)); // Open must be a valid boolean
+      if (req.body.due) assert(/(true|false)/.test(req.body.due)); // Due must be a valid boolean
+      if (req.body.practice_id_bool) assert(/(true|false)/.test(req.body.practice_id_bool)); // Open must be a valid boolean
+      assert(/\d+/.test(parseInt(req.params.id))); // IDs must be an integer
+
+      let submit = {
+        _id: parseInt(req.params.id),
+        primary_title: req.body.primary_title,
+        secondary_title: req.body.secondary_title,
+        practice_link: req.body.practice_link,
+        practice_cutoff: req.body.practice_cutoff,
+        multiple_practice_cutoff: req.body.multiple_practice_cutoff,
+        quiz_link: req.body.quiz_link,
+        quiz_cutoff: req.body.quiz_cutoff,
+        reflection_link: req.body.reflection_link,
+        background_image: req.body.background_image,
+        background_name: req.body.background_name,
+        background_desc: req.body.background_desc,
+        overview: req.body.overview,
+        apply_description: req.body.apply_description,
+        apply_read_src: req.body.apply_read_src,
+        explore: req.body.explore,
+        button_background_image: req.body.button_background_image,
+        practice_url_redirect: req.body.practice_url_redirect,
+        open: req.body.open,
+        due: req.body.due,
+        practice_id_bool: req.body.practice_id_bool,
+        subject: req.body.subject,
+      };
+
+      mongo.addModule(req.body.courseID, submit, (err, data) => {
+        if (err) {
+          res
+            .status(500)
+            .send("500 - Internal Server Error. Encountered error saving module info.");
+        } else res.status(200).send("200 - OK");
+      });
+    } catch (e) {
+      res
+        .status(406)
+        .send(
+          "406 - Not acceptable. You must provide POST body parameters 'id' (a positive integer), and 'open' and/or 'due' (booleans)."
+        );
+    }
+  } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
+});
+
 router.delete("/admin/deleteHomeVid", (req, res) => {
   if (req.session.admin) {
     try {
       authorize(req);
       assert(Object.keys(req.session.course_id).includes(req.body.courseID));
       mongo.deleteHomeVid(req.body.courseID, req.body.vidId, (err) => {
+        if (err)
+          res.status(500).send("500 - Internal Server Error. Encountered error deleting video.");
+        else res.status(200).send("200 - OK");
+      });
+    } catch (e) {
+      res
+        .status(406)
+        .send(
+          "406 - Not acceptable. You must provide body arguments 'id' (a 16 character alphanumberic string) and 'position' (an integer / string consisting of at least 1 digit and nothing else). " +
+            e
+        );
+    }
+  } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
+});
+router.delete("/admin/deleteModule", (req, res) => {
+  if (req.session.admin) {
+    try {
+      authorize(req);
+      assert(Object.keys(req.session.course_id).includes(req.body.courseID));
+      assert(req.body.moduleID);
+      mongo.deleteModule(req.body.courseID, req.body.moduleID, (err) => {
+        if (err)
+          res.status(500).send("500 - Internal Server Error. Encountered error deleting video.");
+        else res.status(200).send("200 - OK");
+      });
+    } catch (e) {
+      res
+        .status(406)
+        .send(
+          "406 - Not acceptable. You must provide body arguments 'id' (a 16 character alphanumberic string) and 'position' (an integer / string consisting of at least 1 digit and nothing else). " +
+            e
+        );
+    }
+  } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
+});
+
+router.delete("/admin/deleteModuleVid", (req, res) => {
+  if (req.session.admin) {
+    try {
+      authorize(req);
+      assert(Object.keys(req.session.course_id).includes(req.body.courseID));
+      assert(req.body.moduleID);
+      assert(req.body.vidID);
+      mongo.deleteModuleVid(req.body.courseID, req.body.moduleID, req.body.vidID, (err) => {
         if (err)
           res.status(500).send("500 - Internal Server Error. Encountered error deleting video.");
         else res.status(200).send("200 - OK");
@@ -548,7 +644,7 @@ router.post("/admin/updateModuleVid", (req, res) => {
         video_desc: req.body.video_desc,
         video_desc_helper: req.body.video_desc_helper,
         position: parseInt(req.body.position),
-        _id: req.body.moduleID,
+        _id: req.body.videoID,
       };
 
       mongo.updateModuleVid(
@@ -564,6 +660,42 @@ router.post("/admin/updateModuleVid", (req, res) => {
           } else res.status(200).send("200 - OK");
         }
       );
+    } catch (e) {
+      res
+        .status(406)
+        .send(
+          "406 - Not acceptable. You must provide POST body parameters videoID, moduleID, and video attributes."
+        );
+    }
+  } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
+});
+
+router.post("/admin/addModuleVid", (req, res) => {
+  if (req.session.admin) {
+    try {
+      authorize(req);
+      assert(req.body.courseID);
+      assert(req.body.video_src);
+      assert(req.body.video_image_src);
+      assert(req.body.video_desc);
+      assert(/\d+/.test(req.body.position));
+      assert(req.body.moduleID);
+      const submit = {
+        video_src: req.body.video_src,
+        video_image_src: req.body.video_image_src,
+        video_desc: req.body.video_desc,
+        video_desc_helper: req.body.video_desc_helper,
+        position: parseInt(req.body.position),
+        _id: req.body.moduleID,
+      };
+
+      mongo.addModuleVid(req.body.courseID, submit, req.body.moduleID, (err, data) => {
+        if (err) {
+          res
+            .status(500)
+            .send("500 - Internal Server Error. Encountered error saving module video info.");
+        } else res.status(200).send("200 - OK");
+      });
     } catch (e) {
       res
         .status(406)
