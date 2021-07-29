@@ -798,7 +798,7 @@ function addHomeVid(src, description, thumbnail, position) {
 }
 
 function deleteHomeVid(vidId) {
-  var result = confirm("Delete this vid?");
+  let result = confirm("Delete this vid?");
   if (result) {
     var dataToSend = JSON.stringify({ courseID: courseID, vidId: vidId });
     $.ajax({
@@ -817,7 +817,7 @@ function deleteHomeVid(vidId) {
   }
 }
 function deleteModule(moduleID) {
-  var result = confirm("Delete this module?");
+  let result = confirm("Delete this module?");
   if (result) {
     var dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID });
     $.ajax({
@@ -837,7 +837,7 @@ function deleteModule(moduleID) {
 }
 
 function deleteModuleVid(moduleID, vidID) {
-  var result = confirm("Delete this module vid?");
+  let result = confirm("Delete this module vid?");
   if (result) {
     var dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID, vidID: vidID });
     $.ajax({

@@ -259,13 +259,12 @@ function updateModuleVid(courseID, moduleVid, moduleID, videoID, callback) {
     .catch((err) => callback(err));
 }
 
-function addModuleVid(courseID, moduleVid, moduleID, callback) {
+function addModuleVid(courseID, moduleVid, moduleID) {
   const db = client.db(config.mongoDBs[courseID]);
   moduleVid._id = randomString();
-  db.collection("modules")
-    .update({ _id: parseInt(moduleID) }, { $push: { videos: moduleVid } })
-    .then(() => callback(null))
-    .catch((err) => callback(err));
+  return db
+    .collection("modules")
+    .update({ _id: parseInt(moduleID) }, { $push: { videos: moduleVid } });
 }
 
 function addHomeVid(courseID, homeVid, callback) {
@@ -283,30 +282,25 @@ function addHomeVid(courseID, homeVid, callback) {
     .catch(() => callback(err));
 }
 
-function addModule(courseID, module, callback) {
+function addModule(courseID, module) {
   const db = client.db(config.mongoDBs[courseID]);
-  db.collection("modules")
-    .update({ _id: module._id }, { $setOnInsert: module }, { upsert: true })
-    .then(() => callback(null))
-    .catch(() => callback(err));
+  return db
+    .collection("modules")
+    .update({ _id: module._id }, { $setOnInsert: module }, { upsert: true });
 }
 
-function deleteModule(courseID, moduleID, callback) {
+function deleteModule(courseID, moduleID) {
   const db = client.db(config.mongoDBs[courseID]);
-  db.collection("modules")
-    .deleteOne({
-      _id: parseInt(moduleID),
-    })
-    .then(() => callback(null))
-    .catch(() => callback(err));
+  return db.collection("modules").deleteOne({
+    _id: parseInt(moduleID),
+  });
 }
 
-function deleteModuleVid(courseID, moduleID, vidID, callback) {
+function deleteModuleVid(courseID, moduleID, vidID) {
   const db = client.db(config.mongoDBs[courseID]);
-  db.collection("modules")
-    .update({ _id: parseInt(moduleID) }, { $pull: { videos: { _id: vidID } } })
-    .then(() => callback(null))
-    .catch(() => callback(err));
+  return db
+    .collection("modules")
+    .update({ _id: parseInt(moduleID) }, { $pull: { videos: { _id: vidID } } });
 }
 
 function deleteHomeVid(courseID, vidId, callback) {
