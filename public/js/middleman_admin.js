@@ -140,6 +140,15 @@ $(document).ready(async function () {
       .fail((err) => console.log("module retrieval failed"))
       .always(() => hideLoadingBar());
   }
+
+  if (needs.includes("unifiedGradebook")) {
+    $.get(`${herokuAPI}/admin/unifiedGradebook`, {
+      hostname,
+      courseID,
+    })
+      .done((gradebook) => writeUnifiedGradebook(gradebook))
+      .fail((err) => console.log("gradebook retrieval failed"));
+  }
 });
 
 /*****************************************************************
@@ -553,6 +562,30 @@ function writeModuleVidEdit(modules) {
   $("#video_desc").val(moduleVidToEdit.video_desc);
   $("#video_desc_helper").val(moduleVidToEdit.video_desc_helper);
   $("#position").val(moduleVidToEdit.position);
+}
+
+function writeUnifiedGradebook(gradebook) {
+  const html = Object.entries(gradebook).reduce((accum, [id, student]) => {
+    const modulesHTML = Object.values(student.modules).reduce(
+      (accum, module) =>
+        accum +
+        `
+        <td>${module.practice}</td>
+        <td>${module.apply}</td>
+        `,
+      ""
+    );
+    return (
+      accum +
+      `<tr>
+      <td>${student.name}</td>
+      <td>${id}</td>
+      <td>${student.team}</td>
+      ${modulesHTML}
+    </tr>`
+    );
+  }, "");
+  $("#gradebook").html(html);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
