@@ -791,10 +791,10 @@ router.get("/admin/unifiedGradebook", async (req, res) => {
   if (req.session.admin) {
     try {
       // const courseID = Object.keys(req.session.course_id)[0];
-      const courseID = "8310",
+      const courseID = "8369",
         gradebook = {},
         assignmentIdToType = {},
-        emptyModules = {},
+        moduleIDs = [],
         courseUserProgress = await mongo.getCourseUserProgress(courseID),
         modules = await mongo.client
           .db(config.mongoDBs[courseID])
@@ -816,36 +816,38 @@ router.get("/admin/unifiedGradebook", async (req, res) => {
           type: "apply",
           moduleID: module._id,
         };
-        emptyModules[module._id] = { practice: 0, apply: 0 };
+        moduleIDs.push(module._id);
       });
 
       courseUserProgress.map((userProgress) => {
-        if (userProgress.team && userProgress.team !== Object.values(req.session.course_id)[0])
+        if (userProgress.team && userProgress.team !== Object.values(req.session.course_id)[0]) {
           gradebook[userProgress.user] = {
-            modules: emptyModules,
+            modules: {},
             team: userProgress.team,
             name: "",
           };
+          moduleIDs.map(
+            (id) => (gradebook[userProgress.user].modules[id] = { practice: 0, apply: 0 })
+          );
+        }
       });
 
       for (const section of sections) {
         if (!section.students) continue;
         section.students.map((student) => {
-          if (student.id in gradebook) gradebook[student.id].name = student.name;
+          if (student.id in gradebook) gradebook[student.id].name = student.short_name;
         });
       }
 
       for (const submission of submissions) {
         const userID = submission.user_id.toString();
         const assignmentType = assignmentIdToType[submission.assignment_id];
-        console.log(gradebook[userID], submission);
 
         if (userID in gradebook && assignmentType) {
           gradebook[userID].modules[assignmentType.moduleID][assignmentType.type] =
             submission.score;
         }
       }
-      console.log(JSON.stringify(gradebook, null, 2));
       res.status(200).send(gradebook);
     } catch (e) {
       console.log(e);

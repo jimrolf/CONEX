@@ -17,6 +17,7 @@ function hideLoadingBar() {
 }
 
 const hostname = "https://educationvirginia.instructure.com";
+let unifiedGradebook;
 $(document).ready(async function () {
   // Get the course title
   if (needs.includes("courseTitle")) {
@@ -146,7 +147,10 @@ $(document).ready(async function () {
       hostname,
       courseID,
     })
-      .done((gradebook) => writeUnifiedGradebook(gradebook))
+      .done((gradebook) => {
+        unifiedGradebook = Object.entries(gradebook);
+        writeUnifiedGradebook(unifiedGradebook);
+      })
       .fail((err) => console.log("gradebook retrieval failed"));
   }
 });
@@ -565,13 +569,13 @@ function writeModuleVidEdit(modules) {
 }
 
 function writeUnifiedGradebook(gradebook) {
-  const html = Object.entries(gradebook).reduce((accum, [id, student]) => {
+  const html = gradebook.reduce((accum, [id, student]) => {
     const modulesHTML = Object.values(student.modules).reduce(
       (accum, module) =>
         accum +
         `
-        <td>${module.practice}</td>
-        <td>${module.apply}</td>
+        <td>${Math.round(module.practice)}</td>
+        <td>${Math.round(module.apply)}</td>
         `,
       ""
     );
@@ -586,6 +590,13 @@ function writeUnifiedGradebook(gradebook) {
     );
   }, "");
   $("#gradebook").html(html);
+}
+
+function sortUnifiedGradebook(unifiedGradebook, id, compareFn) {
+  unifiedGradebook.sort(compareFn);
+  writeUnifiedGradebook(unifiedGradebook);
+  $("th[name='sort_button']").removeClass("bg-secondary");
+  $(`#${id}`).addClass("bg-secondary");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
