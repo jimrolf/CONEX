@@ -165,7 +165,6 @@ cron.schedule("*/3 * * * * *", async () => {
       }
 
       for (const module of Object.keys(highestPractice)) {
-        console.log(highestPractice[module].length);
         highestPractice[module].sort((a, b) => (a.score > b.score ? -1 : 1));
         for (let i = 0; i < 10; i++) {
           if (typeof highestPractice[module][i] === "undefined") continue;
@@ -483,7 +482,7 @@ async function updateBadgeProgress(courseID, userProgress, completed, badgeIdToP
         }
       });
     }
-    const badgeDiff = diff(badgeProgress, userProgress.badges);
+    const badgeDiff = diff(userProgress.badges, badgeProgress);
     if (Object.keys(badgeDiff).length > 0) {
       for (const id of Object.keys(userProgress.badges)) {
         badgeProgress[id] = { has: true };
