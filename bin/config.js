@@ -42,6 +42,10 @@ config.mongoDBs = {
   8467: "physics21",
 };
 
+config.devDBs = {
+  8310: "development",
+};
+
 // If we're in a development environment, use the development databasez
 if (process.env.NODE_ENV == "development") {
   config.mongoDBs["8310"] = "development";
