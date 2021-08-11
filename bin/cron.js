@@ -41,15 +41,15 @@ cron.schedule("0 0 0 * * *", () => {
 /**
  * @description - https://www.npmjs.com/package/node-cron; runs every Monday to update every course's badges related to Top scores and Earliest Time Completed
  */
-cron.schedule("*/3 * * * * *", async () => {
+cron.schedule("0 0 * * Mon", async () => {
   const logs = {};
-  Object.keys(config.devDBs).map(async (courseID) => {
-    console.log(`Updating ${config.devDBs[courseID]}'s user progress`);
+  Object.keys(config.mongoDBs).map(async (courseID) => {
+    console.log(`Updating ${config.mongoDBs[courseID]}'s user progress`);
     try {
       const assignmentIdToType = {}, // Maps a course's modules assignment id to its type - e.g 22657: "practice"
         badgeIdToPoints = {}; // Maps a course's badges id to its points - e.g 1: 200
 
-      const db = mongo.client.db(config.devDBs[courseID]),
+      const db = mongo.client.db(config.mongoDBs[courseID]),
         userSubmissionsPromise = () =>
           canvas.getSubmissions(
             courseID,
@@ -82,6 +82,7 @@ cron.schedule("*/3 * * * * *", async () => {
           moduleID: module._id,
         };
         assignmentIdToType[module.reflection_link] = { type: "reflection", moduleID: module._id };
+        //initializes dicts with module ids
         highestPractice[module._id] = [];
         highestQuiz[module._id] = [];
         times[0][module._id] = { user: {}, time: 0 };
@@ -92,20 +93,35 @@ cron.schedule("*/3 * * * * *", async () => {
         badgeIdToPoints[badge._id] = parseInt(badge.Points);
       });
 
-      /*
-      {moduleID: {user: userProgress,
-                  timeCompleted: x}
-                }
-      */
-      // Iterate through each user
+      //stores user's module progress for later
+      moduleScores = {};
       for (const user of userSubmissions.value) {
         if (user.submissions.length <= 0) continue;
-        // User score
-        userProgress = await db // Get current user's progress from MongoDB
-          .collection("user_progress")
-          .findOne({ user: user.user_id.toString() });
 
+        let score = 0; // User score
+        // Number of completed assignments
+        const completed = {
+            practice: 0,
+            apply: 0,
+            reflection: 0,
+            daily: 0,
+            inspirer: 0,
+          },
+          userProgress = await db // Get current user's progress from MongoDB
+            .collection("user_progress")
+            .findOne({ user: user.user_id.toString() });
         if (!userProgress) continue;
+        score += await updateModuleProgress(
+          courseID,
+          assignmentIdToType,
+          modules.value,
+          userProgress,
+          user.submissions,
+          completed,
+          logs
+        );
+        moduleScores[userProgress.user] = score;
+
         for (const submission of user.submissions) {
           if (!(submission.assignment_id in assignmentIdToType)) continue;
           switch (assignmentIdToType[submission.assignment_id].type) {
@@ -113,19 +129,21 @@ cron.schedule("*/3 * * * * *", async () => {
               const moduleID = assignmentIdToType[submission.assignment_id].moduleID; // Map current submission id to moduleID
               const module = modules.value.find((module) => module._id === moduleID);
               if (submission.score >= module.practice_cutoff) {
+                //pushes scores to array mapped to module id
                 highestPractice[moduleID].push({
                   user: userProgress,
                   score: submission.score,
                 });
               }
-
-              if (times[0][moduleID].time === 0) {
-                times[0][moduleID] = { user: userProgress, time: submission.submitted_at };
-              } else {
-                if (Date.parse(submission.submitted_at) > times[0][moduleID].time) {
-                  console.log("comparing", submission.submitted_at, times[0][moduleID].time);
-                  times[0][moduleID] = { user: userProgress, time: submission.submitted_at };
-                }
+              //keeps track of earliest date
+              if (
+                Date.parse(submission.submitted_at) < Date.parse(times[0][moduleID].time) ||
+                times[0][moduleID].time === 0
+              ) {
+                times[0][moduleID] = {
+                  user: userProgress,
+                  time: submission.submitted_at,
+                };
               }
               break;
             }
@@ -138,24 +156,27 @@ cron.schedule("*/3 * * * * *", async () => {
                   score: submission.score,
                 });
               }
-              if (times[1][moduleID].time === 0) {
-                times[1][moduleID] = { user: userProgress, time: submission.submitted_at };
-              } else {
-                if (Date.parse(submission.submitted_at) > times[1][moduleID].time) {
-                  times[1][moduleID] = { user: userProgress, time: submission.submitted_at };
-                }
+              if (
+                Date.parse(submission.submitted_at) < Date.parse(times[1][moduleID].time) ||
+                times[1][moduleID].time === 0
+              ) {
+                times[1][moduleID] = {
+                  user: userProgress,
+                  time: submission.submitted_at,
+                };
               }
-
               break;
             }
             case "reflection":
               const moduleID = assignmentIdToType[submission.assignment_id].moduleID;
-              if (times[2][moduleID].time === 0) {
-                times[2][moduleID] = { user: userProgress, time: submission.submitted_at };
-              } else {
-                if (Date.parse(submission.submitted_at) > times[2][moduleID].time) {
-                  times[2][moduleID] = { user: userProgress, time: submission.submitted_at };
-                }
+              if (
+                Date.parse(submission.submitted_at) < Date.parse(times[2][moduleID].time) ||
+                times[2][moduleID].time === 0
+              ) {
+                times[2][moduleID] = {
+                  user: userProgress,
+                  time: submission.submitted_at,
+                };
               }
               break;
             default:
@@ -163,12 +184,14 @@ cron.schedule("*/3 * * * * *", async () => {
           }
         }
       }
-
+      //assigns highest and top ten practice
       for (const module of Object.keys(highestPractice)) {
         highestPractice[module].sort((a, b) => (a.score > b.score ? -1 : 1));
         for (let i = 0; i < 10; i++) {
           if (typeof highestPractice[module][i] === "undefined") continue;
-          let score = 0;
+          let score = moduleScores[highestPractice[module][i].user.user];
+
+          //checks if there are multiple people with highest score
           if (i === 0 || highestPractice[module][i].score === highestPractice[module][0].score) {
             score += await updateBadgeProgress(
               courseID,
@@ -195,11 +218,12 @@ cron.schedule("*/3 * * * * *", async () => {
           );
         }
       }
+      //assigns highest and top ten quiz
       for (const module of Object.keys(highestQuiz)) {
         highestQuiz[module].sort((a, b) => (a.score > b.score ? -1 : 1));
         for (let i = 0; i < 10; i++) {
           if (typeof highestQuiz[module][i] === "undefined") continue;
-          let score = 0;
+          let score = moduleScores[highestQuiz[module][i].user.user];
           if (i === 0 || highestQuiz[module][i].score === highestQuiz[module][0].score) {
             score += await updateBadgeProgress(
               courseID,
@@ -220,6 +244,32 @@ cron.schedule("*/3 * * * * *", async () => {
           await mongo.updateUserProgressField(
             courseID,
             highestQuiz[module][i].user.user,
+            "$set",
+            "score",
+            score
+          );
+        }
+      }
+      //assigns earliest completors
+      const first_badge_values = [
+        { first_practice: 1 },
+        { first_quiz: 1 },
+        { first_reflection: 1 },
+      ];
+      for (let i = 0; i < 3; i++) {
+        for (const module of Object.keys(times[i])) {
+          if (times[i][module].time === 0) continue;
+          let score = moduleScores[times[i][module].user.user];
+          score += await updateBadgeProgress(
+            courseID,
+            times[i][module].user,
+            first_badge_values[i],
+            badgeIdToPoints,
+            logs
+          );
+          await mongo.updateUserProgressField(
+            courseID,
+            times[i][module].user,
             "$set",
             "score",
             score
@@ -247,7 +297,7 @@ cron.schedule("*/15 * * * *", async () => {
         badgeIdToPoints = {}; // Maps a course's badges id to its points - e.g 1: 200
       logs = {};
 
-      const db = mongo.client.db(config.devDBs[courseID]),
+      const db = mongo.client.db(config.mongoDBs[courseID]),
         userSubmissionsPromise = () =>
           canvas.getSubmissions(
             courseID,
@@ -284,6 +334,9 @@ cron.schedule("*/15 * * * *", async () => {
       });
       badges.value.map((badge) => {
         badgeIdToPoints[badge._id] = parseInt(badge.Points);
+        if (badge._id === 32 && typeof badge._id.assignment_id !== "undefined") {
+          assignmentIdToType[badge._id.assignment_id] = { type: "inspirer" };
+        }
       });
 
       // Iterate through each user
@@ -297,6 +350,7 @@ cron.schedule("*/15 * * * *", async () => {
             apply: 0,
             reflection: 0,
             daily: 0,
+            inspirer: 0,
           },
           userProgress = await db // Get current user's progress from MongoDB
             .collection("user_progress")
@@ -393,6 +447,8 @@ async function updateModuleProgress(
           score += 100;
           completed.reflection += 1;
           break;
+        case "inspirer":
+          completed.inspirer += 1;
         default:
           console.log(`Assignment ${submission.assignment_id} not stored in Mongo`);
       }
@@ -458,7 +514,7 @@ const badgeRequirements = {
     { id: 30, req: 7 },
     { id: 31, req: 10 },
   ],
-  discussion_inspirer: [{ id: 32, req: 1 }],
+  inspirer: [{ id: 32, req: 1 }],
 };
 /**
  * @param {string} courseID
