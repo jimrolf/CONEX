@@ -105,6 +105,7 @@ function updateVideo(courseID, videoID, setDict, callback) {
     .then(() => callback(null))
     .catch((err) => callback(err));
 }
+
 function updateVideoDefaults(courseID, thumbnail, playbutton, callback) {
   let db = client.db(config.mongoDBs[courseID]);
   db.collection("home")
@@ -236,6 +237,19 @@ function updateTodaysDaily(courseID, assignment_id) {
       { type: "todays_daily" },
       { $set: { assignment_id: assignment_id.toString() } }
     );
+}
+
+async function updateModules(courseID, modules) {
+  const db = client.db(config.mongoDBs[courseID]);
+  Object.entries(modules).map(async ([oldID, { newID, open, due }]) => {
+    const module = await db.collection("modules").findOneAndDelete({ _id: parseInt(oldID) });
+    await db.collection("modules").insertOne({
+      ...module.value,
+      _id: parseInt(newID),
+      open: open.toString(),
+      due: due.toString(),
+    });
+  });
 }
 
 function updateModule(courseID, module, callback) {
@@ -382,6 +396,7 @@ module.exports = {
   updateHomepageUpdates,
   updateNavigation,
   updateBadge,
+  updateModules,
   updateModule,
   updateModuleVid,
   addModuleVid,

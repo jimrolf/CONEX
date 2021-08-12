@@ -501,25 +501,27 @@ function writeModules(modules) {
       }
     }
   } else {
-    let maxId = 0;
-    modules.forEach((module) => {
-      if (maxId < module._id) {
-        maxId = module._id;
-      }
-    });
-    $("#moduleAddButton").prop("href", "modules/add/" + (maxId + 1));
+    $("#moduleAddButton").prop("href", `modules/add/${modules.length + 1}`);
     let content = modules.reduce((content, module) => {
       return (
         content +
         `<tr>
-            <td>${module._id}</td>
+            <td><input name="module_id_input" class="form-control" data-module-id=${
+              module._id
+            } value="${
+          module._id
+        }" type="number" min="1" maxlength="2" size="2" oninput="this.value = Math.abs(this.value)"></input></td>
             <td>${module.primary_title}</td>
             <td>${module.secondary_title}</td>
             <td>
-                <input type='checkbox' ${module.open === "true" ? "checked" : ""}/>
+                <input name="module_open_checkbox" type='checkbox' ${
+                  module.open === "true" ? "checked" : ""
+                }/>
             </td>
             <td>
-                <input type='checkbox' ${module.due === "true" ? "checked" : ""}/>
+                <input name="module_due_checkbox" type='checkbox' ${
+                  module.due === "true" ? "checked" : ""
+                }/>
             </td>
             <td>${module.practice_link}</td>
             <td>${module.quiz_link}</td>
@@ -704,6 +706,7 @@ function addModule() {
     .done((res) => {
       console.log("[M] done");
       alert("Module successfully added.");
+      window.location.replace("/admin/modules");
     })
     .fail((res) => {
       console.log("[M] fail");
@@ -798,9 +801,8 @@ function addHomeVid(src, description, thumbnail, position) {
 }
 
 function deleteHomeVid(vidId) {
-  let result = confirm("Delete this vid?");
-  if (result) {
-    var dataToSend = JSON.stringify({ courseID: courseID, vidId: vidId });
+  if (confirm("Delete this homepage video?")) {
+    const dataToSend = JSON.stringify({ courseID: courseID, vidId: vidId });
     $.ajax({
       url: herokuAPI + "/admin/deleteHomeVid",
       type: "DELETE",
@@ -816,10 +818,10 @@ function deleteHomeVid(vidId) {
       });
   }
 }
+
 function deleteModule(moduleID) {
-  let result = confirm("Delete this module?");
-  if (result) {
-    var dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID });
+  if (confirm("Delete this module?")) {
+    const dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID });
     $.ajax({
       url: herokuAPI + "/admin/deleteModule",
       type: "DELETE",
@@ -837,9 +839,8 @@ function deleteModule(moduleID) {
 }
 
 function deleteModuleVid(moduleID, vidID) {
-  let result = confirm("Delete this module vid?");
-  if (result) {
-    var dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID, vidID: vidID });
+  if (confirm("Delete this module video?")) {
+    const dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID, vidID: vidID });
     $.ajax({
       url: herokuAPI + "/admin/deleteModuleVid",
       type: "DELETE",
@@ -854,6 +855,30 @@ function deleteModuleVid(moduleID, vidID) {
         console.log("[MV] delete fail");
       });
   }
+}
+
+function saveModules() {
+  const modules = {};
+  const open = $("[name='module_open_checkbox']");
+  const due = $("[name='module_due_checkbox']");
+  $("[name='module_id_input']").each((index, elem) => {
+    const moduleID = elem.attributes["data-module-id"].nodeValue;
+    modules[moduleID] = {
+      newID: elem.value,
+      open: open[index].checked,
+      due: due[index].checked,
+    };
+  });
+
+  $.post({
+    url: herokuAPI + "/admin/modules",
+    data: { courseID, modules: JSON.stringify(modules) }, //TODO - fix express json encoding
+  })
+    .done((res) => {
+      alert("Modules save successful.");
+      location.reload();
+    })
+    .fail((res) => alert("Module save failed. Check there are no duplicates."));
 }
 /////////////////////////////////////////////////////////////////////////////////////
 // Keep the preview up to date

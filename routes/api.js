@@ -379,6 +379,33 @@ router.post("/admin/addHomeVid", (req, res) => {
   } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
 });
 
+router.post("/admin/modules", async (req, res) => {
+  if (req.session.admin) {
+    try {
+      req.body.modules = JSON.parse(req.body.modules);
+      const uniqueIDs = new Set();
+      assert(Object.keys(req.session.course_id).includes(req.body.courseID));
+      Object.entries(req.body.modules).map(([oldID, { newID, due, open }]) => {
+        assert(parseInt(oldID));
+        assert(parseInt(newID));
+        assert(/(true|false)/.test(due));
+        assert(/(true|false)/.test(open));
+        uniqueIDs.add(newID);
+      });
+      assert(uniqueIDs.size === Object.keys(req.body.modules).length);
+      await mongo.updateModules(req.body.courseID, req.body.modules);
+      res.status(200).send("200 - OK");
+    } catch (e) {
+      console.error(e);
+      res
+        .status(406)
+        .send(
+          "406 - Not acceptable. You must provide POST body parameters courseID and modules, an Object of module ids to a new id, 'open', and 'due' (booleans)."
+        );
+    }
+  } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
+});
+
 router.post("/admin/addModule/:id", async (req, res) => {
   if (req.session.admin) {
     try {
