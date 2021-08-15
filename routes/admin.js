@@ -1,5 +1,3 @@
-const mongo = require("../models/mongo");
-
 const router = require("express").Router(),
   config = require("../bin/config");
 
