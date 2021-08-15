@@ -574,8 +574,12 @@ function writeUnifiedGradebook(gradebook) {
       (accum, module) =>
         accum +
         `
-        <td>${Math.round(module.practice)}</td>
-        <td>${Math.round(module.apply)}</td>
+        <td class="text-center">${
+          typeof module.practice === "number" ? Math.round(module.practice) : module.practice
+        }</td>
+        <td class="text-center">${
+          typeof module.apply === "number" ? Math.round(module.apply) : module.apply
+        }</td>
         `,
       ""
     );

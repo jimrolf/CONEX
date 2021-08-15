@@ -790,23 +790,22 @@ router.post("/admin/updateBadge/:id", (req, res) => {
 router.get("/admin/unifiedGradebook", async (req, res) => {
   if (req.session.admin) {
     try {
-      // const courseID = Object.keys(req.session.course_id)[0];
-      const courseID = "8369",
+      const courseID = Object.keys(req.session.course_id)[0],
         gradebook = {},
         assignmentIdToType = {},
         moduleIDs = [],
-        courseUserProgress = await mongo.getCourseUserProgress(courseID),
         modules = await mongo.client
           .db(config.mongoDBs[courseID])
           .collection("modules")
           .find()
           .toArray(),
+        sections = await canvas.getSections(courseID, "include[]=students"),
         submissions = await canvas.getSubmissions(
           courseID,
           "student_ids[]=all&workflow_state=graded&per_page=1000"
-        ),
-        sections = await canvas.getSections(courseID, "include[]=students");
+        );
 
+      // Map assignement id to module type and ID
       modules.map((module) => {
         assignmentIdToType[module.practice_link] = {
           type: "practice",
@@ -819,26 +818,22 @@ router.get("/admin/unifiedGradebook", async (req, res) => {
         moduleIDs.push(module._id);
       });
 
-      courseUserProgress.map((userProgress) => {
-        if (userProgress.team && userProgress.team !== Object.values(req.session.course_id)[0]) {
-          gradebook[userProgress.user] = {
-            modules: {},
-            team: userProgress.team,
-            name: "",
-          };
-          moduleIDs.map(
-            (id) => (gradebook[userProgress.user].modules[id] = { practice: 0, apply: 0 })
-          );
-        }
-      });
-
+      // Add each student to gradebook with name, team, and initialize modules empty scores
       for (const section of sections) {
-        if (!section.students) continue;
+        if (!section.students || section.name === Object.values(req.session.course_id)[0]) continue;
         section.students.map((student) => {
-          if (student.id in gradebook) gradebook[student.id].name = student.short_name;
+          gradebook[student.id] = {
+            modules: {},
+            team: section.name,
+            name: student.short_name,
+          };
+          moduleIDs.map((id) => {
+            gradebook[student.id].modules[id] = { practice: "-", apply: "-" };
+          });
         });
       }
 
+      // Fill in empty scores
       for (const submission of submissions) {
         const userID = submission.user_id.toString();
         const assignmentType = assignmentIdToType[submission.assignment_id];
