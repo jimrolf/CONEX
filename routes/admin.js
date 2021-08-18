@@ -1,5 +1,7 @@
 const router = require("express").Router(),
-  config = require("../bin/config");
+  config = require("../bin/config"),
+  canvas = require("../models/canvas"),
+  mongo = require("../models/mongo");
 
 function requireAdmin(req, res, next) {
   if (req.session.admin) next();
@@ -17,6 +19,15 @@ router.get("/homepageEdit", (req, res) => {
 router.get("/homeVidAdd", (req, res) => {
   res.render("admin/homeVidAdd", {
     title: `Adding Video`,
+    heroku: config.herokuAppName,
+    id: req.params.id,
+    courseID: Object.keys(req.session.course_id)[0],
+  });
+});
+
+router.get("/modules/add/:id", (req, res) => {
+  res.render("admin/moduleAdd", {
+    title: `Adding Module`,
     heroku: config.herokuAppName,
     id: req.params.id,
     courseID: Object.keys(req.session.course_id)[0],
@@ -67,6 +78,15 @@ router.get("/modules/videoEdit/:moduleID/:videoID", (req, res) => {
   });
 });
 
+router.get("/modules/videoAdd/:moduleID", (req, res) => {
+  res.render("admin/moduleVideoAdd", {
+    title: `Adding video to module ${req.params.moduleID}`,
+    heroku: config.herokuAppName,
+    moduleID: req.params.moduleID,
+    courseID: Object.keys(req.session.course_id)[0],
+  });
+});
+
 router.get("/badges", (req, res) => {
   res.render("admin/badges", {
     title: `Course Badges`,
@@ -109,11 +129,25 @@ router.get("/luckyBonuses", (req, res) => {
   });
 });
 
-router.get("/unifiedGradebook", (req, res) => {
+router.get("/unifiedGradebook", async (req, res) => {
+  const courseID = Object.keys(req.session.course_id)[0],
+    modules = await mongo.client
+      .db(config.mongoDBs[courseID])
+      .collection("modules")
+      .find()
+      .sort({ _id: 1 })
+      .toArray();
+
+  const moduleTitles = modules.map((module) => ({
+    id: module._id,
+    title: module.primary_title + " " + module.secondary_title,
+  }));
+
   res.render("admin/gradebook", {
     title: "Gradebook",
     heroku: config.herokuAppName,
     courseID: Object.keys(req.session.course_id)[0],
+    moduleTitles,
   });
 });
 

@@ -17,6 +17,7 @@ function hideLoadingBar() {
 }
 
 const hostname = "https://educationvirginia.instructure.com";
+let unifiedGradebook;
 $(document).ready(async function () {
   // Get the course title
   if (needs.includes("courseTitle")) {
@@ -139,6 +140,18 @@ $(document).ready(async function () {
       .done((data) => writeModuleVidEdit(data))
       .fail((err) => console.log("module retrieval failed"))
       .always(() => hideLoadingBar());
+  }
+
+  if (needs.includes("unifiedGradebook")) {
+    $.get(`${herokuAPI}/admin/unifiedGradebook`, {
+      hostname,
+      courseID,
+    })
+      .done((gradebook) => {
+        unifiedGradebook = Object.entries(gradebook);
+        writeUnifiedGradebook(unifiedGradebook);
+      })
+      .fail((err) => console.log("gradebook retrieval failed"));
   }
 });
 
@@ -459,7 +472,6 @@ function writeModules(modules) {
       $("#apply_read_src").val(moduleToEdit.apply_read_src);
       $("#explore_text").val(moduleToEdit.explore);
       $("#subject").val(moduleToEdit.subject);
-
       if (moduleToEdit.open === "true") $("#open_yes").prop("checked", true);
       else $("#open_no").prop("checked", true);
 
@@ -470,12 +482,13 @@ function writeModules(modules) {
         $("#practice_id_bool_true").prop("checked", true);
       else $("#practice_id_bool_false").prop("checked", true);
 
-      let videos = moduleToEdit.videos;
-      videos.sort((video1, video2) => video1.position > video2.position);
-      let videoHTML = "";
-      videos.map(
-        (video, index) =>
-          (videoHTML += `
+      if (moduleToEdit.videos) {
+        let videos = moduleToEdit.videos;
+        videos.sort((video1, video2) => video1.position > video2.position);
+        let videoHTML = "";
+        videos.map(
+          (video, index) =>
+            (videoHTML += `
           <div id="module_vid_${index}" class="video-element d-flex align-items-center">
             <div>
               <div class="onexys_video">
@@ -490,26 +503,38 @@ function writeModules(modules) {
             
             <div class="d-flex flex-column ml-2">
               <a class="btn btn-dark text-white mb-1" href="/admin/modules/videoEdit/${moduleToEdit._id}/${video._id}">Edit Video</a>
-              <button class="btn btn-danger">Delete Video</button>
+              <button class="btn btn-danger" onClick ="deleteModuleVid(${moduleToEdit._id}, '${video._id}')"
+                       >Delete
+                    </button>
             </div>
           </div>         
           `)
-      );
-      $("#module_vid_container").append(videoHTML);
+        );
+        $("#module_vid_container").append(videoHTML);
+      }
     }
   } else {
+    $("#moduleAddButton").prop("href", `modules/add/${modules.length + 1}`);
     let content = modules.reduce((content, module) => {
       return (
         content +
         `<tr>
-            <td>${module._id}</td>
+            <td><input name="module_id_input" class="form-control" data-module-id=${
+              module._id
+            } value="${
+          module._id
+        }" type="number" min="1" maxlength="2" size="2" oninput="this.value = Math.abs(this.value)"></input></td>
             <td>${module.primary_title}</td>
             <td>${module.secondary_title}</td>
             <td>
-                <input type='checkbox' ${module.open === "true" ? "checked" : ""}/>
+                <input name="module_open_checkbox" type='checkbox' ${
+                  module.open === "true" ? "checked" : ""
+                }/>
             </td>
             <td>
-                <input type='checkbox' ${module.due === "true" ? "checked" : ""}/>
+                <input name="module_due_checkbox" type='checkbox' ${
+                  module.due === "true" ? "checked" : ""
+                }/>
             </td>
             <td>${module.practice_link}</td>
             <td>${module.quiz_link}</td>
@@ -519,6 +544,9 @@ function writeModules(modules) {
                     href="modules/edit/${module._id}">
                     Edit
                 </a>
+                <button class="btn btn-danger" onClick = "deleteModule(${module._id})"
+                       >Delete
+                    </button>
             </td>
         </tr>`
       );
@@ -538,6 +566,41 @@ function writeModuleVidEdit(modules) {
   $("#video_desc").val(moduleVidToEdit.video_desc);
   $("#video_desc_helper").val(moduleVidToEdit.video_desc_helper);
   $("#position").val(moduleVidToEdit.position);
+}
+
+function writeUnifiedGradebook(gradebook) {
+  const html = gradebook.reduce((accum, [id, student]) => {
+    const modulesHTML = Object.values(student.modules).reduce(
+      (accum, module) =>
+        accum +
+        `
+        <td class="text-center">${
+          typeof module.practice === "number" ? Math.round(module.practice) : module.practice
+        }</td>
+        <td class="text-center">${
+          typeof module.apply === "number" ? Math.round(module.apply) : module.apply
+        }</td>
+        `,
+      ""
+    );
+    return (
+      accum +
+      `<tr>
+      <td>${student.name}</td>
+      <td>${id}</td>
+      <td>${student.team}</td>
+      ${modulesHTML}
+    </tr>`
+    );
+  }, "");
+  $("#gradebook").html(html);
+}
+
+function sortUnifiedGradebook(unifiedGradebook, id, compareFn) {
+  unifiedGradebook.sort(compareFn);
+  writeUnifiedGradebook(unifiedGradebook);
+  $("th[name='sort_button']").removeClass("bg-secondary");
+  $(`#${id}`).addClass("bg-secondary");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -661,6 +724,44 @@ function updateModule() {
     });
 }
 
+function addModule() {
+  const submit = {
+    courseID,
+    primary_title: $("#primary_title").val(),
+    secondary_title: $("#secondary_title").val(),
+    practice_link: $("#practice_link").val(),
+    practice_cutoff: $("#multiple_practice_cutoff").val().split("_")[1],
+    practice_url_redirect: $("#practice_url_redirect").val(),
+    multiple_practice_cutoff: $("#multiple_practice_cutoff").val(),
+    quiz_link: $("#quiz_link").val(),
+    quiz_cutoff: $("#quiz_cutoff").val(),
+    reflection_link: $("#reflection_link").val(),
+    background_image: $("#background_image").val(),
+    button_background_image: $("#button_background_image").val(),
+    background_name: $("#background_name").val(),
+    background_desc: $("#background_desc").val(),
+    overview: $("#overview_text").val(),
+    apply_description: $("#apply_description").val(),
+    apply_read_src: $("#apply_read_src").val(),
+    explore: $("#explore_text").val(),
+    open: $("#open_yes").is(":checked") ? "true" : "false",
+    due: $("#due_yes").is(":checked") ? "true" : "false",
+    practice_id_bool: $("#practice_id_bool_true").is(":checked") ? "true" : "false",
+    subject: $("#subject").val(),
+  };
+
+  $.post(herokuAPI + `/admin/addModule/${moduleID}`, submit)
+    .done((res) => {
+      console.log("[M] done");
+      alert("Module successfully added.");
+      window.location.replace("/admin/modules");
+    })
+    .fail((res) => {
+      console.log("[M] fail");
+      alert("Module add failed.");
+    });
+}
+
 function updateModuleVid() {
   const submit = {
     video_src: $("#video_src").val(),
@@ -681,6 +782,28 @@ function updateModuleVid() {
     .fail((res) => {
       console.log("[MV] fail");
       alert("Module video update failed.");
+    });
+}
+
+function addModuleVid() {
+  const submit = {
+    video_src: $("#video_src").val(),
+    video_image_src: $("#video_image_src").val(),
+    video_desc: $("#video_desc").val(),
+    video_desc_helper: $("#video_desc_helper").val(),
+    position: $("#position").val(),
+    moduleID,
+    courseID,
+  };
+
+  $.post(herokuAPI + `/admin/addModuleVid`, submit)
+    .done((res) => {
+      console.log("[MV] Add done");
+      alert("Module video successfully added.");
+    })
+    .fail((res) => {
+      console.log("[MV] Add fail");
+      alert("Module video add failed.");
     });
 }
 
@@ -726,9 +849,8 @@ function addHomeVid(src, description, thumbnail, position) {
 }
 
 function deleteHomeVid(vidId) {
-  var result = confirm("Delete this vid?");
-  if (result) {
-    var dataToSend = JSON.stringify({ courseID: courseID, vidId: vidId });
+  if (confirm("Delete this homepage video?")) {
+    const dataToSend = JSON.stringify({ courseID: courseID, vidId: vidId });
     $.ajax({
       url: herokuAPI + "/admin/deleteHomeVid",
       type: "DELETE",
@@ -743,6 +865,68 @@ function deleteHomeVid(vidId) {
         console.log("[V] delete fail");
       });
   }
+}
+
+function deleteModule(moduleID) {
+  if (confirm("Delete this module?")) {
+    const dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID });
+    $.ajax({
+      url: herokuAPI + "/admin/deleteModule",
+      type: "DELETE",
+      contentType: "application/json; charset=utf-8",
+      data: dataToSend,
+    })
+      .done((res) => {
+        location.reload();
+        console.log("[M] delete success");
+      })
+      .fail((res) => {
+        console.log("[M] delete fail");
+      });
+  }
+}
+
+function deleteModuleVid(moduleID, vidID) {
+  if (confirm("Delete this module video?")) {
+    const dataToSend = JSON.stringify({ courseID: courseID, moduleID: moduleID, vidID: vidID });
+    $.ajax({
+      url: herokuAPI + "/admin/deleteModuleVid",
+      type: "DELETE",
+      contentType: "application/json; charset=utf-8",
+      data: dataToSend,
+    })
+      .done((res) => {
+        location.reload();
+        console.log("[MV] delete success");
+      })
+      .fail((res) => {
+        console.log("[MV] delete fail");
+      });
+  }
+}
+
+function saveModules() {
+  const modules = {};
+  const open = $("[name='module_open_checkbox']");
+  const due = $("[name='module_due_checkbox']");
+  $("[name='module_id_input']").each((index, elem) => {
+    const moduleID = elem.attributes["data-module-id"].nodeValue;
+    modules[moduleID] = {
+      newID: elem.value,
+      open: open[index].checked,
+      due: due[index].checked,
+    };
+  });
+
+  $.post({
+    url: herokuAPI + "/admin/modules",
+    data: { courseID, modules: JSON.stringify(modules) }, //TODO - fix express json encoding
+  })
+    .done((res) => {
+      alert("Modules save successful.");
+      location.reload();
+    })
+    .fail((res) => alert("Module save failed. Check there are no duplicates."));
 }
 /////////////////////////////////////////////////////////////////////////////////////
 // Keep the preview up to date

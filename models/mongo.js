@@ -105,6 +105,7 @@ function updateVideo(courseID, videoID, setDict, callback) {
     .then(() => callback(null))
     .catch((err) => callback(err));
 }
+
 function updateVideoDefaults(courseID, thumbnail, playbutton, callback) {
   let db = client.db(config.mongoDBs[courseID]);
   db.collection("home")
@@ -178,6 +179,16 @@ function getUserProgress(courseID, userID, callback) {
     callback(err, data)
   );
 }
+
+function getCourseUserProgress(courseID) {
+  try {
+    const db = client.db(config.mongoDBs[courseID]);
+    return db.collection("user_progress").find().toArray();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function getDailyError(courseID, callback) {
   const db = client.db(config.mongoDBs[courseID]);
   db.collection("global").findOne({ type: "daily-error" }, (err, data) => callback(err, data));
@@ -239,6 +250,25 @@ function updateTodaysDaily(courseID, assignment_id) {
     );
 }
 
+async function updateModules(courseID, modules) {
+  const db = client.db(config.mongoDBs[courseID]);
+
+  const prevModules = await Promise.allSettled(
+    Object.keys(modules).map((oldID) =>
+      db.collection("modules").findOneAndDelete({ _id: parseInt(oldID) })
+    )
+  );
+
+  Object.entries(modules).map(async ([, { newID, open, due }], index) => {
+    await db.collection("modules").insertOne({
+      ...prevModules[index].value.value,
+      _id: parseInt(newID),
+      open: open.toString(),
+      due: due.toString(),
+    });
+  });
+}
+
 function updateModule(courseID, module, callback) {
   const db = client.db(config.mongoDBs[courseID]);
   db.collection("modules")
@@ -260,6 +290,14 @@ function updateModuleVid(courseID, moduleVid, moduleID, videoID, callback) {
     .catch((err) => callback(err));
 }
 
+function addModuleVid(courseID, moduleVid, moduleID) {
+  const db = client.db(config.mongoDBs[courseID]);
+  moduleVid._id = randomString();
+  return db
+    .collection("modules")
+    .update({ _id: parseInt(moduleID) }, { $push: { videos: moduleVid } });
+}
+
 function addHomeVid(courseID, homeVid, callback) {
   const db = client.db(config.mongoDBs[courseID]);
   db.collection("home")
@@ -273,6 +311,27 @@ function addHomeVid(courseID, homeVid, callback) {
     })
     .then(() => callback(null))
     .catch(() => callback(err));
+}
+
+function addModule(courseID, module) {
+  const db = client.db(config.mongoDBs[courseID]);
+  return db
+    .collection("modules")
+    .update({ _id: module._id }, { $setOnInsert: module }, { upsert: true });
+}
+
+function deleteModule(courseID, moduleID) {
+  const db = client.db(config.mongoDBs[courseID]);
+  return db.collection("modules").deleteOne({
+    _id: parseInt(moduleID),
+  });
+}
+
+function deleteModuleVid(courseID, moduleID, vidID) {
+  const db = client.db(config.mongoDBs[courseID]);
+  return db
+    .collection("modules")
+    .update({ _id: parseInt(moduleID) }, { $pull: { videos: { _id: vidID } } });
 }
 
 function deleteHomeVid(courseID, vidId, callback) {
@@ -344,6 +403,7 @@ module.exports = {
   getModules,
   getProgress,
   getUserProgress,
+  getCourseUserProgress,
   getDailyError,
   getBadges,
   getNavigationData,
@@ -354,10 +414,15 @@ module.exports = {
   updateHomepageUpdates,
   updateNavigation,
   updateBadge,
+  updateModules,
   updateModule,
   updateModuleVid,
+  addModuleVid,
   addHomeVid,
+  addModule,
   deleteHomeVid,
+  deleteModule,
+  deleteModuleVid,
   updateDaily,
   updateTodaysDaily,
   updateUserProgressField,
