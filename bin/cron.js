@@ -3,7 +3,7 @@ const cron = require("node-cron"),
   config = require("./config"),
   canvas = require("../models/canvas"),
   assert = require("assert"),
-  { diff } = require("deep-object-diff");
+  { diff, addedDiff } = require("deep-object-diff");
 
 /**
  * @description - Cron job to update daily tasks every day of the week at midnight
@@ -39,37 +39,30 @@ cron.schedule("0 0 0 * * *", () => {
 });
 
 /**
- * @description - https://www.npmjs.com/package/node-cron; runs every Monday to update every course's badges related to Top scores and Earliest Time Completed
+ * @description - Handles badges 22-26; runs everyday at midnight to update every course's badges related to Top scores and Earliest Time Completed
  */
-cron.schedule("0 0 * * Mon", async () => {
-  const logs = {};
+cron.schedule("0 0 0 * * *", async () => {
   Object.keys(config.mongoDBs).map(async (courseID) => {
-    console.log(`Updating ${config.mongoDBs[courseID]}'s user progress`);
+    console.log(`Updating ${config.mongoDBs[courseID]}'s badges`);
     try {
       const assignmentIdToType = {}, // Maps a course's modules assignment id to its type - e.g 22657: "practice"
-        badgeIdToPoints = {}; // Maps a course's badges id to its points - e.g 1: 200
-
+        badgeIdToPoints = {}, // Maps a course's badges id to its points - e.g 1: 200
+        badgeLeaderboard = {};
       const db = mongo.client.db(config.mongoDBs[courseID]),
-        userSubmissionsPromise = () =>
+        submissionsPromise = () =>
           canvas.getSubmissions(
             courseID,
-            "student_ids[]=all&workflow_state=graded&grouped=true&per_page=1000" // Get submissions grouped by user - e.g [{user_id:1, submissions: []}, ...]
+            "student_ids[]=all&workflow_state=graded&order=graded_at&per_page=1000" // Ordered by submission time to locate earliest submitted assignments
           ),
         modulesPromise = () => db.collection("modules").find().sort({ _id: 1 }).toArray(),
         badgesPromise = () => db.collection("badges").find().sort({ _id: 1 }).toArray();
-
       // Retrieve all necessary information at once
-      const [userSubmissions, modules, badges] = await Promise.allSettled([
-        userSubmissionsPromise(),
+
+      const [submissions, modules, badges] = await Promise.allSettled([
+        submissionsPromise(),
         modulesPromise(),
         badgesPromise(),
       ]);
-
-      //Intitalizes dicts of scores for practice and quizzes
-      let highestPractice = {};
-      let highestQuiz = {};
-      // Keeps track of earliest submitted time for each module in order(practice, apply, reflection)
-      let times = [{}, {}, {}];
 
       // Initialize maps to each value
       modules.value.map((module) => {
@@ -82,202 +75,129 @@ cron.schedule("0 0 * * Mon", async () => {
           moduleID: module._id,
         };
         assignmentIdToType[module.reflection_link] = { type: "reflection", moduleID: module._id };
-        //initializes dicts with module ids
-        highestPractice[module._id] = [];
-        highestQuiz[module._id] = [];
-        times[0][module._id] = { user: {}, time: 0 };
-        times[1][module._id] = { user: {}, time: 0 };
-        times[2][module._id] = { user: {}, time: 0 };
+
+        // initialize leaderboard mapping module id to leaderboard
+        badgeLeaderboard[module._id] = {
+          earliestPractice: "",
+          earliestApply: "",
+          earliestReflection: "",
+          practiceTopTen: [],
+          applyTopTen: [],
+        };
       });
       badges.value.map((badge) => {
         badgeIdToPoints[badge._id] = parseInt(badge.Points);
       });
 
-      //stores user's module progress for later
-      moduleScores = {};
-      for (const user of userSubmissions.value) {
-        if (user.submissions.length <= 0) continue;
+      for (const submission of submissions.value) {
+        const assignmentType = assignmentIdToType[submission.assignment_id];
+        if (!assignmentType) continue;
+        switch (assignmentType.type) {
+          case "practice": {
+            const moduleID = assignmentType.moduleID;
+            const module = modules.value.find((module) => module._id === moduleID);
+            // Since it's ordered by submission time, the first one to fill it will be the earliest one
+            if (
+              badgeLeaderboard[moduleID].earliestPractice === "" &&
+              submission.score >= module.practice_cutoff
+            )
+              badgeLeaderboard[moduleID].earliestPractice = submission.user_id.toString();
 
-        let score = 0; // User score
-        // Number of completed assignments
-        const completed = {
-            practice: 0,
-            apply: 0,
-            reflection: 0,
-            daily: 0,
-            inspirer: 0,
-          },
-          userProgress = await db // Get current user's progress from MongoDB
-            .collection("user_progress")
-            .findOne({ user: user.user_id.toString() });
-        if (!userProgress) continue;
-        score += await updateModuleProgress(
-          courseID,
-          assignmentIdToType,
-          modules.value,
-          userProgress,
-          user.submissions,
-          completed,
-          logs
+            badgeLeaderboard[moduleID].practiceTopTen.push({
+              userID: submission.user_id.toString(),
+              score: submission.score,
+            });
+          }
+          case "apply": {
+            const moduleID = assignmentType.moduleID;
+            const module = modules.value.find((module) => module._id === moduleID);
+            if (
+              badgeLeaderboard[moduleID].earliestApply === "" &&
+              submission.score >= module.quiz_cutoff
+            )
+              badgeLeaderboard[moduleID].earliestApply = submission.user_id.toString();
+            badgeLeaderboard[moduleID].applyTopTen.push({
+              userID: submission.user_id.toString(),
+              score: submission.score,
+            });
+          }
+          case "reflection": {
+            const moduleID = assignmentType.moduleID;
+            badgeLeaderboard[moduleID].earliestReflection = submission.user_id.toString();
+          }
+        }
+      }
+
+      Object.keys(badgeLeaderboard).map((moduleID) => {
+        badgeLeaderboard[moduleID].practiceTopTen.sort(
+          (submission1, submission2) => submission2.score - submission1.score
         );
-        moduleScores[userProgress.user] = score;
+        badgeLeaderboard[moduleID].applyTopTen.sort(
+          (submission1, submission2) => submission2.score - submission1.score
+        );
+        badgeLeaderboard[moduleID].practiceTopTen = badgeLeaderboard[moduleID].practiceTopTen.slice(
+          0,
+          10
+        );
+        badgeLeaderboard[moduleID].applyTopTen = badgeLeaderboard[moduleID].applyTopTen.slice(
+          0,
+          10
+        );
+      });
 
-        for (const submission of user.submissions) {
-          if (!(submission.assignment_id in assignmentIdToType)) continue;
-          switch (assignmentIdToType[submission.assignment_id].type) {
-            case "practice": {
-              const moduleID = assignmentIdToType[submission.assignment_id].moduleID; // Map current submission id to moduleID
-              const module = modules.value.find((module) => module._id === moduleID);
-              if (submission.score >= module.practice_cutoff) {
-                //pushes scores to array mapped to module id
-                highestPractice[moduleID].push({
-                  user: userProgress,
-                  score: submission.score,
-                });
-              }
-              //keeps track of earliest date
-              if (
-                Date.parse(submission.submitted_at) < Date.parse(times[0][moduleID].time) ||
-                times[0][moduleID].time === 0
-              ) {
-                times[0][moduleID] = {
-                  user: userProgress,
-                  time: submission.submitted_at,
-                };
-              }
-              break;
-            }
-            case "apply": {
-              const moduleID = assignmentIdToType[submission.assignment_id].moduleID; // Map current submission id to moduleID
-              const module = modules.value.find((module) => module._id === moduleID);
-              if (submission.score >= module.quiz_cutoff) {
-                highestQuiz[moduleID].push({
-                  user: userProgress,
-                  score: submission.score,
-                });
-              }
-              if (
-                Date.parse(submission.submitted_at) < Date.parse(times[1][moduleID].time) ||
-                times[1][moduleID].time === 0
-              ) {
-                times[1][moduleID] = {
-                  user: userProgress,
-                  time: submission.submitted_at,
-                };
-              }
-              break;
-            }
-            case "reflection":
-              const moduleID = assignmentIdToType[submission.assignment_id].moduleID;
-              if (
-                Date.parse(submission.submitted_at) < Date.parse(times[2][moduleID].time) ||
-                times[2][moduleID].time === 0
-              ) {
-                times[2][moduleID] = {
-                  user: userProgress,
-                  time: submission.submitted_at,
-                };
-              }
-              break;
-            default:
-              console.log(`Assignment ${submission.assignment_id} not stored in Mongo`);
-          }
-        }
-      }
-      //assigns highest and top ten practice
-      for (const module of Object.keys(highestPractice)) {
-        highestPractice[module].sort((a, b) => (a.score > b.score ? -1 : 1));
-        for (let i = 0; i < 10; i++) {
-          if (typeof highestPractice[module][i] === "undefined") continue;
-          let score = moduleScores[highestPractice[module][i].user.user];
-
-          //checks if there are multiple people with highest score
-          if (i === 0 || highestPractice[module][i].score === highestPractice[module][0].score) {
-            score += await updateBadgeProgress(
-              courseID,
-              highestPractice[module][i].user,
-              { top_practice: 1, top_ten_practice: 1 },
-              badgeIdToPoints,
-              logs
-            );
-          } else {
-            score += await updateBadgeProgress(
-              courseID,
-              highestPractice[module][i].user,
-              { top_ten_practice: 1 },
-              badgeIdToPoints,
-              logs
-            );
-          }
+      Object.values(badgeLeaderboard).map(
+        async ({
+          earliestPractice,
+          earliestApply,
+          earliestReflection,
+          practiceTopTen,
+          applyTopTen,
+        }) => {
           await mongo.updateUserProgressField(
             courseID,
-            highestPractice[module][i].user.user,
+            earliestPractice.toString(),
             "$set",
-            "score",
-            score
-          );
-        }
-      }
-      //assigns highest and top ten quiz
-      for (const module of Object.keys(highestQuiz)) {
-        highestQuiz[module].sort((a, b) => (a.score > b.score ? -1 : 1));
-        for (let i = 0; i < 10; i++) {
-          if (typeof highestQuiz[module][i] === "undefined") continue;
-          let score = moduleScores[highestQuiz[module][i].user.user];
-          if (i === 0 || highestQuiz[module][i].score === highestQuiz[module][0].score) {
-            score += await updateBadgeProgress(
-              courseID,
-              highestQuiz[module][i].user,
-              { top_quiz: 1, top_ten_quiz: 1 },
-              badgeIdToPoints,
-              logs
-            );
-          } else {
-            score += await updateBadgeProgress(
-              courseID,
-              highestQuiz[module][i].user,
-              { top_ten_quiz: 1 },
-              badgeIdToPoints,
-              logs
-            );
-          }
-          await mongo.updateUserProgressField(
-            courseID,
-            highestQuiz[module][i].user.user,
-            "$set",
-            "score",
-            score
-          );
-        }
-      }
-      //assigns earliest completors
-      const first_badge_values = [
-        { first_practice: 1 },
-        { first_quiz: 1 },
-        { first_reflection: 1 },
-      ];
-      for (let i = 0; i < 3; i++) {
-        for (const module of Object.keys(times[i])) {
-          if (times[i][module].time === 0) continue;
-          let score = moduleScores[times[i][module].user.user];
-          score += await updateBadgeProgress(
-            courseID,
-            times[i][module].user,
-            first_badge_values[i],
-            badgeIdToPoints,
-            logs
+            `badges.${badgeRequirements.first_practice[0].id}.has`,
+            true
           );
           await mongo.updateUserProgressField(
             courseID,
-            times[i][module].user,
+            earliestApply.toString(),
             "$set",
-            "score",
-            score
+            `badges.${badgeRequirements.first_quiz[0].id}.has`,
+            true
           );
-        }
-      }
+          await mongo.updateUserProgressField(
+            courseID,
+            earliestReflection.toString(),
+            "$set",
+            `badges.${badgeRequirements.first_reflection[0].id}.has`,
+            true
+          );
 
-      console.log(`Finished updating ${config.mongoDBs[courseID]}`, JSON.stringify(logs));
+          practiceTopTen.map(async (user) => {
+            await mongo.updateUserProgressField(
+              courseID,
+              user.userID.toString(),
+              "$set",
+              `badges.${badgeRequirements.top_ten_practice[0].id}.has`,
+              true
+            );
+          });
+
+          applyTopTen.map(async (user) => {
+            await mongo.updateUserProgressField(
+              courseID,
+              user.userID.toString(),
+              "$set",
+              `badges.${badgeRequirements.top_ten_practice[0].id}.has`,
+              true
+            );
+          });
+        }
+      );
+
+      console.log(`Finished ${config.mongoDBs[courseID]}'s badges`);
     } catch (e) {
       console.error(e);
     }
@@ -285,7 +205,6 @@ cron.schedule("0 0 * * Mon", async () => {
 });
 
 /**
- * @todo - refactor to use also refactored mongo functions
  * @todo - possible optimzation: store various maps in redis cache
  * @description - https://www.npmjs.com/package/node-cron; runs every 15 minues to update every course's user progress
  */
@@ -293,9 +212,9 @@ cron.schedule("*/15 * * * *", async () => {
   Object.keys(config.mongoDBs).map(async (courseID) => {
     try {
       console.log(`Updating ${config.mongoDBs[courseID]}'s user progress`);
+      const logs = {};
       const assignmentIdToType = {}, // Maps a course's modules assignment id to its type - e.g 22657: "practice"
         badgeIdToPoints = {}; // Maps a course's badges id to its points - e.g 1: 200
-      logs = {};
 
       const db = mongo.client.db(config.mongoDBs[courseID]),
         userSubmissionsPromise = () =>
@@ -332,25 +251,18 @@ cron.schedule("*/15 * * * *", async () => {
       daily_tasks.value.map((daily) => {
         assignmentIdToType[daily.assignment_id] = { type: "daily" };
       });
-      badges.value.map((badge) => {
-        badgeIdToPoints[badge._id] = parseInt(badge.Points);
-        if (badge._id === 32 && typeof badge._id.assignment_id !== "undefined") {
-          assignmentIdToType[badge._id.assignment_id] = { type: "inspirer" };
-        }
-      });
+      badges.value.map((badge) => (badgeIdToPoints[badge._id] = parseInt(badge.Points)));
 
       // Iterate through each user
       for (const user of userSubmissions.value) {
         if (user.submissions.length <= 0) continue;
 
-        let score = 0; // User score
         // Number of completed assignments
         const completed = {
             practice: 0,
             apply: 0,
             reflection: 0,
             daily: 0,
-            inspirer: 0,
           },
           userProgress = await db // Get current user's progress from MongoDB
             .collection("user_progress")
@@ -358,7 +270,7 @@ cron.schedule("*/15 * * * *", async () => {
 
         if (!userProgress) continue;
 
-        score += await updateModuleProgress(
+        await updateModuleProgress(
           courseID,
           assignmentIdToType,
           modules.value,
@@ -368,15 +280,9 @@ cron.schedule("*/15 * * * *", async () => {
           logs
         );
 
-        score += await updateBadgeProgress(
-          courseID,
-          userProgress,
-          completed,
-          badgeIdToPoints,
-          logs
-        );
+        await updateBadgeProgress(courseID, userProgress, completed, logs);
 
-        await mongo.updateUserProgressField(courseID, userProgress.user, "$set", "score", score);
+        await updateUserScore(courseID, userProgress.user, completed, badgeIdToPoints);
       }
       console.log(`Finished updating ${config.mongoDBs[courseID]}`, JSON.stringify(logs));
     } catch (e) {
@@ -406,7 +312,6 @@ async function updateModuleProgress(
   logs
 ) {
   try {
-    let score = 0;
     const moduleProgress = {};
     for (const submission of submissions) {
       if (!(submission.assignment_id in assignmentIdToType)) continue;
@@ -416,7 +321,6 @@ async function updateModuleProgress(
           const module = modules.find((module) => module._id === moduleID);
           const subject = assignmentIdToType[submission.assignment_id].subject;
           if (submission.score >= module.practice_cutoff) {
-            score += 100;
             completed.practice += 1;
             moduleID in moduleProgress
               ? (moduleProgress[moduleID].practice = true)
@@ -430,7 +334,6 @@ async function updateModuleProgress(
           const module = modules.find((module) => module._id === moduleID);
           const subject = assignmentIdToType[submission.assignment_id].subject;
           if (submission.score >= module.quiz_cutoff) {
-            score += 100;
             completed.apply += 1;
             moduleID in moduleProgress
               ? (moduleProgress[moduleID].apply = true)
@@ -440,15 +343,11 @@ async function updateModuleProgress(
           break;
         }
         case "daily":
-          score += 100;
           completed.daily += 1;
           break;
         case "reflection":
-          score += 100;
           completed.reflection += 1;
           break;
-        case "inspirer":
-          completed.inspirer += 1;
         default:
           console.log(`Assignment ${submission.assignment_id} not stored in Mongo`);
       }
@@ -467,8 +366,6 @@ async function updateModuleProgress(
         ? (logs[userProgress.user].modules = moduleDiff)
         : (logs[userProgress.user] = { modules: moduleDiff });
     }
-
-    return score;
   } catch (e) {
     console.log(e);
   }
@@ -523,43 +420,58 @@ const badgeRequirements = {
  * @param {Object} badgeIdToPoints - Object mapping badge id to points earned
  * @return {number} - Calculated score earned from badges
  */
-async function updateBadgeProgress(courseID, userProgress, completed, badgeIdToPoints, logs) {
+async function updateBadgeProgress(courseID, userProgress, completed, logs) {
   try {
-    let score = 0;
-
     const badgeProgress = {};
     // e.g - [practice, [ { id: 7, req: 1 }, { id: 8, req: 3 }]]
     for (const [type, badges] of Object.entries(badgeRequirements)) {
       badges.map((badge) => {
         // For a given type, if the number completed is greater than the badge req, push
         if (completed[type] >= badge.req) {
-          score += badgeIdToPoints[badge.id];
           badgeProgress[badge.id] = { has: true };
         }
       });
     }
-    const badgeDiff = diff(userProgress.badges, badgeProgress);
+    const badgeDiff = addedDiff(userProgress.badges, badgeProgress);
     if (Object.keys(badgeDiff).length > 0) {
-      for (const id of Object.keys(userProgress.badges)) {
-        badgeProgress[id] = { has: true };
-        score += badgeIdToPoints[id];
-      }
-      await mongo.updateUserProgressField(
-        courseID,
-        userProgress.user,
-        "$set",
-        "badges",
-        badgeProgress
-      );
+      Object.key(badgesProgress).map(async (badgeID) => {
+        await mongo.updateUserProgressField(
+          courseID,
+          userProgress.user,
+          "$set",
+          `badges.${badgeID}.has`,
+          badgeProgress[badgeID].has
+        );
+      });
       userProgress.user in logs
         ? (logs[userProgress.user].badges = badgeDiff)
         : (logs[userProgress.user] = { badges: badgeDiff });
     }
-
-    return score;
   } catch (e) {
     console.log(e);
   }
+}
+
+async function updateUserScore(courseID, userID, completed, badgeIdToPoints) {
+  const db = mongo.client.db(config.mongoDBs[courseID]);
+  const userProgress = await db // Get current user's progress from MongoDB
+    .collection("user_progress")
+    .findOne({ user: userID.toString() });
+  let score = 0;
+
+  if (userProgress.modules) {
+    score += completed.practice * 100;
+    score += completed.apply * 100;
+    score += completed.reflection * 100;
+    score += completed.daily * 100;
+  }
+
+  if (userProgress.badges)
+    Object.entries(userProgress.badges).map(([badgeID, { has }]) => {
+      if (has) score += badgeIdToPoints[badgeID];
+    });
+
+  await mongo.updateUserProgressField(courseID, userProgress.user, "$set", "score", score);
 }
 
 module.exports = {
