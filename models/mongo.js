@@ -131,14 +131,9 @@ function getTodaysDaily(courseID) {
   return db.collection("global").findOne({ type: "todays_daily" });
 }
 
-function getLuckyBonuses(courseID, callback) {
+function getLuckyBonuses(courseID) {
   let db = client.db(config.mongoDBs[courseID]);
-  db.collection("lucky_bonuses")
-    .find()
-    .sort({ _id: 1 })
-    .toArray()
-    .then((data) => callback(null, data))
-    .catch((err) => callback(err, null));
+  return db.collection("lucky_bonuses").find().sort({ _id: 1 }).toArray();
 }
 
 function getModules(courseID, callback) {
@@ -173,11 +168,9 @@ function getModule(courseID, moduleID, callback) {
   });
 }
 
-function getUserProgress(courseID, userID, callback) {
+function getUserProgress(courseID, userID) {
   let db = client.db(config.mongoDBs[courseID]);
-  db.collection("user_progress").findOne({ user: userID.toString() }, (err, data) =>
-    callback(err, data)
-  );
+  return db.collection("user_progress").findOne({ user: userID.toString() });
 }
 
 function getCourseUserProgress(courseID) {
@@ -248,6 +241,24 @@ function updateTodaysDaily(courseID, assignment_id) {
       { type: "todays_daily" },
       { $set: { assignment_id: assignment_id.toString() } }
     );
+}
+
+function updateLucky(courseID, luckyID, submit) {
+  const db = client.db(config.mongoDBs[courseID]);
+  return db
+    .collection("lucky_bonuses")
+    .findOneAndUpdate({ _id: parseInt(luckyID) }, { $set: submit });
+}
+function addLucky(courseID, luckyID, submit) {
+  const db = client.db(config.mongoDBs[courseID]);
+  return db.collection("lucky_bonuses").insertOne({ _id: parseInt(luckyID) }, { $set: submit });
+}
+
+function updateLuckyProgress(courseID, userID, lucky) {
+  const db = client.db(config.mongoDBs[courseID]);
+  return db
+    .collection("user_progress")
+    .findOneAndUpdate({ _id: userID }, { $set: { badges: { 27: { has: true } } } });
 }
 
 async function updateModules(courseID, modules) {
@@ -414,6 +425,8 @@ module.exports = {
   updateHomepageUpdates,
   updateNavigation,
   updateBadge,
+  updateLucky,
+  updateLuckyProgress,
   updateModules,
   updateModule,
   updateModuleVid,

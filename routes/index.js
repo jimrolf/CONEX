@@ -9,15 +9,42 @@ router.post("/home", [auth.updateCookies, auth.checkUser, auth.userExists], (req
   res.redirect("/home");
 });
 
-router.get("/home", (req, res) => {
-  if (req.session.user_id && req.session.course_id)
+router.get("/home", async (req, res) => {
+  if (req.session.user_id && req.session.course_id) {
+    let lucky_to_load = null;
+    let luckyscore = null;
+    try {
+      const luckys = await mongo.getLuckyBonuses(Object.keys(req.session.course_id)[0]);
+      const studentProgress = await mongo.getUserProgress(
+        Object.keys(req.session.course_id)[0],
+        req.session.user_id
+      );
+      let d = new Date();
+      const student_badges = studentProgress.badges;
+      for (lucky of luckys) {
+        // If student not already on list AND within 5 minutes of the assigned time...
+        if (
+          !student_badges[27] &&
+          Math.abs((d.getTime() - Date.parse(lucky.time)) / (1000 * 60)) <= 5
+        ) {
+          lucky_to_load = lucky;
+          luckyscore = lucky.point_value;
+        }
+      }
+    } catch (e) {
+      console.log(e);
+      res.status(406).send("406 - Your request could not be processed.");
+    }
     res.render("home", {
       title: "Home",
       courseID: Object.keys(req.session.course_id)[0],
       courseName: Object.values(req.session.course_id)[0],
       userID: req.session.user_id,
+      heroku_app: config.herokuAppName,
+      lucky: lucky_to_load,
+      luckyscore: luckyscore,
     });
-  else res.status(500).render("cookieError");
+  } else res.status(500).render("cookieError");
 });
 
 router.post("/badges", [auth.updateCookies, auth.checkUser, auth.userExists], (req, res) => {

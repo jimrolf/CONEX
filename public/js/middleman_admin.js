@@ -332,23 +332,31 @@ function prettyDate(dateString) {
 }
 
 function writeLuckyInfo(lucky) {
-  let content = lucky.reduce((content, lucky) => {
-    return (
-      content +
-      `
+  if (edit) {
+    let luckyToEdit = lucky.filter((lucky) => lucky._id == luckyID)[0];
+    $("#date_time").val(luckyToEdit.time);
+    $("#point_value").val(luckyToEdit.point_value);
+    $("#image_name").val(luckyToEdit.image_name);
+  } else {
+    let content = lucky.reduce((content, lucky) => {
+      return (
+        content +
+        `
       <tr>
         <td>Bonus ${lucky._id}</td>
         <td>Date ${prettyDate(lucky.time)}</td>
         <td>
           <a class="btn btn-dark"
-            href="lucky/edit/${lucky._id}">
+            href="luckyEdit/${lucky._id}">
             Edit
           </a>
         </td>
       </tr>`
-    );
-  }, ``);
-  $("#luckyTable").append(content);
+      );
+    }, ``);
+    $("#luckyTable").append(content);
+    $("#luckyAddButton").prop("href", `luckyAdd/${lucky.length + 1}`);
+  }
 }
 
 /**
@@ -634,6 +642,30 @@ function updateVideo(videoID, src, description, thumbnail, position) {
   })
     .done((res) => console.log("[V] done"))
     .fail((res) => console.log("[V] fail"));
+}
+
+function updateLucky(luckyID, date_time, point_value, image_name) {
+  $.post(herokuAPI + "/admin/updateLucky", {
+    courseID,
+    id: luckyID,
+    date_time,
+    point_value,
+    image_name,
+  })
+    .done((res) => console.log("[L] done"))
+    .fail((res) => console.log("[L] fail"));
+}
+
+function addLucky(luckyID, date_time, point_value, image_name) {
+  $.post(herokuAPI + "/admin/addLucky", {
+    courseID,
+    id: luckyID,
+    date_time,
+    point_value,
+    image_name,
+  })
+    .done((res) => console.log("[L] add done"))
+    .fail((res) => console.log("[L] add fail"));
 }
 
 function updateVideoDefaults(thumbnail, playbutton) {
