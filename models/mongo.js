@@ -37,22 +37,20 @@ function findUser(courseID, userID) {
 function initUser(courseID, userID) {
   try {
     const db = client.db(config.mongoDBs[courseID]);
-    return db
-      .collection("user_progress")
-      .updateOne(
-        { user: userID.toString() },
-        {
-          $set: {
-            badges: {},
-            modules: {},
-            score: 0,
-            team: "",
-            user: userID.toString(),
-            luckies: {},
-          },
+    return db.collection("user_progress").updateOne(
+      { user: userID.toString() },
+      {
+        $set: {
+          badges: {},
+          modules: {},
+          score: 0,
+          team: "",
+          user: userID.toString(),
+          luckies: {},
         },
-        { upsert: true }
-      );
+      },
+      { upsert: true }
+    );
   } catch (e) {
     console.error(e);
   }
@@ -270,13 +268,6 @@ function deleteLucky(courseID, luckyID) {
   return db.collection("lucky_bonuses").deleteOne({ _id: luckyID });
 }
 
-function updateLuckyProgress(courseID, userID, lucky) {
-  const db = client.db(config.mongoDBs[courseID]);
-  return db
-    .collection("user_progress")
-    .findOneAndUpdate({ _id: userID }, { $set: { badges: { 27: { has: true } } } });
-}
-
 async function updateModules(courseID, modules) {
   const db = client.db(config.mongoDBs[courseID]);
 
@@ -443,7 +434,6 @@ module.exports = {
   updateNavigation,
   updateBadge,
   updateLucky,
-  updateLuckyProgress,
   updateModules,
   updateModule,
   updateModuleVid,
