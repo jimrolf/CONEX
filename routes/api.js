@@ -88,7 +88,6 @@ router.post("/home/updateLuckyProgress", async (req, res) => {
     const userID = req.body.userID;
     const luckyID = req.body.luckyID;
     const lucky_score = req.body.lucky_score;
-    //if (!userProgress.badges[27]) {
     await mongo.updateUserProgressField(req.body.courseID, userID, "$set", "badges.27", {
       has: true,
     });
