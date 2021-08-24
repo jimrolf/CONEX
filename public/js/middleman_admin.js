@@ -343,13 +343,21 @@ function writeLuckyInfo(lucky) {
         content +
         `
       <tr>
-        <td>Bonus ${lucky._id}</td>
+        <td> Bonus ${lucky._id} </td>
         <td>Date ${prettyDate(lucky.time)}</td>
         <td>
+        <div class="d-flex flex-column ml-2">
           <a class="btn btn-dark"
             href="luckyEdit/${lucky._id}">
             Edit
           </a>
+          <button class="btn btn-danger" onClick ="deleteLucky(${lucky._id})"
+                       >Delete
+                    </button>
+          </div>
+          
+              
+            
         </td>
       </tr>`
       );
@@ -656,7 +664,7 @@ function updateLucky(luckyID, date_time, point_value, image_name) {
     .fail((res) => console.log("[L] fail"));
 }
 
-function addLucky(luckyID, date_time, point_value, image_name) {
+function addLucky(date_time, point_value, image_name) {
   $.post(herokuAPI + "/admin/addLucky", {
     courseID,
     id: luckyID,
@@ -666,6 +674,25 @@ function addLucky(luckyID, date_time, point_value, image_name) {
   })
     .done((res) => console.log("[L] add done"))
     .fail((res) => console.log("[L] add fail"));
+}
+
+function deleteLucky(luckyID) {
+  if (confirm("Delete this lucky bonus?")) {
+    const dataToSend = JSON.stringify({ courseID: courseID, luckyID: luckyID });
+    $.ajax({
+      url: herokuAPI + "/admin/deleteLucky",
+      type: "DELETE",
+      contentType: "application/json; charset=utf-8",
+      data: dataToSend,
+    })
+      .done((res) => {
+        location.reload();
+        console.log("[L] delete success");
+      })
+      .fail((res) => {
+        console.log("[L] delete fail");
+      });
+  }
 }
 
 function updateVideoDefaults(thumbnail, playbutton) {

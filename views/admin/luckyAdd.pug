@@ -14,7 +14,7 @@ block content
             .form.form-inline
                 a.btn.btn-lg(href=`/admin/luckyBonuses`)
                     i.fa.fa-chevron-left
-                h2='Add a Lucky Bonus'
+                h3.mb-4 Adding Lucky Bonus #{id}
     hr
 
     div.container
@@ -31,4 +31,4 @@ block content
 
             hr
 
-            button.btn.btn-success(onClick="addLucky(#{id}, $('#date_time').val(), $('#point_value').val(), $('#image_name').val()); alert('Lucky Bonus added')") Add Lucky Bonus
+            button.btn.btn-success(onClick="addLucky($('#date_time').val(), $('#point_value').val(), $('#image_name').val());") Add Lucky Bonus

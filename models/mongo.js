@@ -41,7 +41,16 @@ function initUser(courseID, userID) {
       .collection("user_progress")
       .updateOne(
         { user: userID.toString() },
-        { $set: { badges: {}, modules: {}, score: 0, team: "", user: userID.toString() } },
+        {
+          $set: {
+            badges: {},
+            modules: {},
+            score: 0,
+            team: "",
+            user: userID.toString(),
+            luckies: {},
+          },
+        },
         { upsert: true }
       );
   } catch (e) {
@@ -251,7 +260,14 @@ function updateLucky(courseID, luckyID, submit) {
 }
 function addLucky(courseID, luckyID, submit) {
   const db = client.db(config.mongoDBs[courseID]);
-  return db.collection("lucky_bonuses").insertOne({ _id: parseInt(luckyID) }, { $set: submit });
+  return db
+    .collection("lucky_bonuses")
+    .updateOne({ _id: parseInt(luckyID) }, { $setOnInsert: submit }, { upsert: true });
+}
+
+function deleteLucky(courseID, luckyID) {
+  const db = client.db(config.mongoDBs[courseID]);
+  return db.collection("lucky_bonuses").deleteOne({ _id: luckyID });
 }
 
 function updateLuckyProgress(courseID, userID, lucky) {
@@ -405,6 +421,7 @@ function updateUserProgressBadgeOrModules(
 
 module.exports = {
   client, // Allows start.js to create a shared connection pool
+  addLucky,
   getHomepageUpdates,
   getHomepageVideos,
   getDailyTasks,
@@ -436,6 +453,7 @@ module.exports = {
   deleteHomeVid,
   deleteModule,
   deleteModuleVid,
+  deleteLucky,
   updateDaily,
   updateTodaysDaily,
   updateUserProgressField,

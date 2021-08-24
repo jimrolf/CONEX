@@ -80,23 +80,45 @@ router.get("/home/videos", (req, res) => {
 });
 
 router.post("/home/updateLuckyProgress", async (req, res) => {
-  if (req.session.admin) {
-    try {
-      authorize(req);
-      let userID = req.body.id;
-      let luckyscore = req.body.luckyscore;
-      await mongo.updateUserProgressField(req.body.courseID, userID, "$set", "badges.27", {
+  try {
+    authorize(req);
+    assert(req.body.userID);
+    assert(req.body.luckyID);
+    assert(req.body.lucky_score);
+    const userID = req.body.userID;
+    const luckyID = req.body.luckyID;
+    const lucky_score = req.body.lucky_score;
+    //if (!userProgress.badges[27]) {
+    await mongo.updateUserProgressField(req.body.courseID, userID, "$set", "badges.27", {
+      has: true,
+    });
+    await mongo.updateUserProgressField(
+      req.body.courseID,
+      userID,
+      "$set",
+      "luckies." + parseInt(luckyID),
+      {
         has: true,
-      });
-      res.status(200).send("200 - OK");
-    } catch (e) {
-      res
-        .status(406)
-        .send(
-          "406 - Not acceptable. You must provide POST body parameters 'id' (a positive integer), a valid date/time, points, and image name"
-        );
-    }
-  } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
+      }
+    );
+    await mongo.updateUserProgressField(
+      req.body.courseID,
+      userID,
+      "$inc",
+      "score",
+      parseInt(lucky_score)
+    );
+
+    //}
+
+    res.status(200).send("200 - OK");
+  } catch (e) {
+    res
+      .status(406)
+      .send(
+        "406 - Not acceptable. You must provide POST body parameters 'id' (a positive integer), a valid date/time, points, and image name"
+      );
+  }
 });
 
 router.get("/modules", (req, res) => {
@@ -403,7 +425,7 @@ router.post("/admin/updateLucky", async (req, res) => {
       assert(req.body.point_value);
       assert(req.body.image_name);
       const luckyID = parseInt(req.body.id);
-      let submit = {
+      const submit = {
         time: req.body.date_time,
         point_value: req.body.point_value,
         image_name: req.body.image_name,
@@ -440,6 +462,23 @@ router.post("/admin/addLucky", async (req, res) => {
         .status(406)
         .send(
           "406 - Not acceptable. You must provide POST body parameters 'id' (a positive integer), a valid date/time, points, and image name"
+        );
+    }
+  } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
+});
+
+router.delete("/admin/deleteLucky", async (req, res) => {
+  if (req.session.admin) {
+    try {
+      authorize(req);
+      assert(req.body.luckyID);
+      await mongo.deleteLucky(req.body.courseID, req.body.luckyID);
+      res.status(200).send("200 - OK");
+    } catch (e) {
+      res
+        .status(406)
+        .send(
+          "406 - Not acceptable. You must provide body arguments 'id' (a positive integer) " + e
         );
     }
   } else res.status(403).send("403 - Forbidden. You are not authorized to make requests here.");
