@@ -263,7 +263,6 @@ cron.schedule("*/15 * * * *", async () => {
             apply: 0,
             reflection: 0,
             daily: 0,
-            inspirer: 0,
           },
           userProgress = await db // Get current user's progress from MongoDB
             .collection("user_progress")
@@ -349,8 +348,6 @@ async function updateModuleProgress(
         case "reflection":
           completed.reflection += 1;
           break;
-        case "inspirer":
-          completed.inspirer += 1;
         default:
           console.log(`Assignment ${submission.assignment_id} not stored in Mongo`);
       }
