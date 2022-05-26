@@ -672,8 +672,14 @@ function addLucky(date_time, point_value, image_name) {
     point_value,
     image_name,
   })
-    .done((res) => console.log("[L] add done"))
-    .fail((res) => console.log("[L] add fail"));
+    .done((res) => {
+      console.log("[L] done");
+      alert("Lucky add successful.");
+    })
+    .fail((res) => {
+      console.log("[L] fail");
+      alert("Lucky add failed.");
+    });
 }
 
 function deleteLucky(luckyID) {
