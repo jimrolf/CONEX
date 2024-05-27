@@ -72,7 +72,10 @@ config.mongoDBs = {
   '14823': "AscendGreen23",
   '14824': "AscendBlueCoach",
   '310': "AscendBlue24BlueCoach",
-  
+  '15007': "AscendBlue24",
+  '15008': "AscendWhite24",
+  '15009': "AscendGreen24",
+    
 };
 
 // If we're in a development environment, use the development databasez
