@@ -70,7 +70,7 @@ config.mongoDBs = {
   '14821': "AscendBlue23",
   '14822': "AscendWhite23",
   '14823': "AscendGreen23",
-  '14824': "AscendBlueCoach",
+  '14824': "AscendBlue23Coach",
   '310': "AscendBlue24BlueCoach",
   '15007': "AscendBlue24",
   '15008': "AscendWhite24",
