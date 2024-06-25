@@ -10,7 +10,7 @@ const cron = require("node-cron"),
  * @param {string} - Second Min Hour Day-of-Month Month Day-of-Week
  * @param {function}
  */
-cron.schedule("0 0 0 * * *", () => {
+cron.schedule("* * * * *", () => {
   Object.keys(config.mongoDBs).map(async (courseID) => {
     try {
       const today = new Date();
